@@ -14,8 +14,8 @@ class JobScraper:
         self.wp_password = os.getenv('WP_APP_PASSWORD')
         
         # API Keys from environment variables
-        self.adzuna_app_id = os.getenv('ADZUNA_APP_ID')
-        self.adzuna_api_key = os.getenv('ADZUNA_API_KEY')
+        self.adzuna_app_id = '6e27536a'
+        self.adzuna_api_key = '4e216b84d2a29d5a815a765fde36ad61'
         self.jsearch_api_key = os.getenv('JSEARCH_API_KEY')
         
         # Track posted jobs to avoid duplicates
@@ -188,10 +188,10 @@ class JobScraper:
             <p><strong>Location:</strong> {job['location']}</p>
             <p><strong>Source:</strong> {job['source']}</p>
             
-            <h3>Description</h3>
+            <h2>Description</h2>
             {job['description']}
             
-            <p><a href="{job['url']}" target="_blank">Apply Now</a></p>
+            <a href="{job['url']}" target="_blank">Apply Now</a>
             """,
             'status': 'publish',
             'tags': tag_ids,
