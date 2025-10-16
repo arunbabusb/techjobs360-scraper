@@ -1,10 +1,12 @@
 name: Auto Job Scraper
 
+permissions:
+  contents: write
+
 on:
   schedule:
     - cron: '*/30 * * * *'
   workflow_dispatch:
-
 jobs:
   scrape-jobs:
     runs-on: ubuntu-latest
@@ -34,19 +36,3 @@ jobs:
         fi
     
     - name: Run job scraper
-      env:
-        WP_URL: ${{ secrets.WP_URL }}
-        WP_USERNAME: ${{ secrets.WP_USERNAME }}
-        WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-        ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
-        ADZUNA_API_KEY: ${{ secrets.ADZUNA_API_KEY }}
-        JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}
-      run: python job_scraper.py
-    
-    - name: Commit posted jobs tracker
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add posted_jobs.json
-        git diff --quiet && git diff --staged --quiet || git commit -m "Update posted jobs tracker [skip ci]"
-        git push
