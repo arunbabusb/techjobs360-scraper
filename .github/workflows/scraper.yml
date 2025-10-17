@@ -34,4 +34,6 @@ jobs:
         fi
     
     - name: Run job scraper
+      env:
+        JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}
       run: python job_scraper.py
