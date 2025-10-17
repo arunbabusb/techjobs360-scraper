@@ -1,8 +1,6 @@
 name: Auto Job Scraper
-
 permissions:
   contents: write
-
 on:
   schedule:
     - cron: '*/30 * * * *'
@@ -36,3 +34,4 @@ jobs:
         fi
     
     - name: Run job scraper
+      run: python scraper.py
