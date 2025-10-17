@@ -49,9 +49,9 @@ class JobScraper:
         self.posted_jobs.append(job_id)
         self.save_posted_jobs()
     
-    def fetch_adzuna_jobs(self, location='india', results_per_page=10):
+    def fetch_adzuna_jobs(self, location='us', results_per_page=10):
         """Fetch jobs from Adzuna API"""
-        url = f"http://api.adzuna.com/v1/api/jobs/{location}/search/1"
+        url = f"https://api.adzuna.com/v1/api/jobs/{location}/search/1"
         params = {
             'app_id': self.adzuna_app_id,
             'app_key': self.adzuna_api_key,
