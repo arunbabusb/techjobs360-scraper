@@ -21,6 +21,9 @@ class JobScraper:
         # Track posted jobs to avoid duplicates
         self.posted_jobs_file = 'posted_jobs.json'
         self.posted_jobs = self.load_posted_jobs()
+        
+        # Countries to scrape jobs from
+        self.countries = ['in', 'us', 'fr', 'gb', 'de']  # India, USA, France, UK, Germany
     
     def load_posted_jobs(self):
         """Load previously posted job IDs"""
@@ -49,8 +52,16 @@ class JobScraper:
         self.posted_jobs.append(job_id)
         self.save_posted_jobs()
     
-    def fetch_adzuna_jobs(self, location='us', results_per_page=10):
-        """Fetch jobs from Adzuna API"""
+    def fetch_adzuna_jobs(self, location='in', results_per_page=10):
+        """Fetch jobs from Adzuna API
+        
+        Location codes:
+        - India: 'in'
+        - USA: 'us'
+        - UK: 'gb'
+        - Germany: 'de'
+        - France: 'fr'
+        """
         url = f"https://api.adzuna.com/v1/api/jobs/{location}/search/1"
         params = {
             'app_id': self.adzuna_app_id,
@@ -65,7 +76,7 @@ class JobScraper:
             response.raise_for_status()
             return response.json().get('results', [])
         except Exception as e:
-            print(f"Error fetching Adzuna jobs: {e}")
+            print(f"Error fetching Adzuna jobs for {location}: {e}")
             return []
     
     def fetch_jsearch_jobs(self, query='software developer', num_pages=1):
@@ -102,7 +113,7 @@ class JobScraper:
         """
         
         if job_data.get('redirect_url'):
-            content += f"<p>Apply: <a href='{job_data.get('redirect_url')}' target='_blank'>Click here to apply</a></p>"
+            content += f"<p>Apply: <a href=\"{job_data.get('redirect_url')}\" target=\"_blank\">Click here to apply</a></p>"
         
         post_data = {
             'title': job_data.get('title', 'Job Opportunity'),
@@ -147,31 +158,39 @@ class JobScraper:
     def run(self):
         """Main execution method"""
         print("Starting job scraper...")
-        
-        # Fetch jobs from both APIs
-        adzuna_jobs = self.fetch_adzuna_jobs()
-        jsearch_jobs = self.fetch_jsearch_jobs()
-        
-        print(f"Fetched {len(adzuna_jobs)} jobs from Adzuna")
-        print(f"Fetched {len(jsearch_jobs)} jobs from JSearch")
+        print(f"Fetching jobs from countries: {', '.join(self.countries)}")
         
         posted_count = 0
         
-        # Process Adzuna jobs
-        for job in adzuna_jobs:
-            processed_job = self.process_adzuna_job(job)
-            job_id = self.generate_job_id(
-                processed_job['title'],
-                processed_job['company'],
-                processed_job['location']
-            )
+        # Fetch jobs from Adzuna for all countries
+        for country in self.countries:
+            print(f"\nFetching jobs from Adzuna for country: {country}")
+            adzuna_jobs = self.fetch_adzuna_jobs(location=country)
+            print(f"Fetched {len(adzuna_jobs)} jobs from Adzuna ({country})")
             
-            if not self.is_job_posted(job_id):
-                if self.post_to_wordpress(processed_job):
-                    self.mark_job_posted(job_id)
-                    posted_count += 1
-                    print(f"Posted: {processed_job['title']} at {processed_job['company']}")
-                    time.sleep(2)  # Rate limiting
+            # Process Adzuna jobs for this country
+            for job in adzuna_jobs:
+                processed_job = self.process_adzuna_job(job)
+                job_id = self.generate_job_id(
+                    processed_job['title'],
+                    processed_job['company'],
+                    processed_job['location']
+                )
+                
+                if not self.is_job_posted(job_id):
+                    if self.post_to_wordpress(processed_job):
+                        self.mark_job_posted(job_id)
+                        posted_count += 1
+                        print(f"Posted: {processed_job['title']} at {processed_job['company']} - {processed_job['location']}")
+                        time.sleep(2)  # Rate limiting
+            
+            # Add delay between country requests
+            time.sleep(3)
+        
+        # Fetch jobs from JSearch (global)
+        print(f"\nFetching jobs from JSearch...")
+        jsearch_jobs = self.fetch_jsearch_jobs()
+        print(f"Fetched {len(jsearch_jobs)} jobs from JSearch")
         
         # Process JSearch jobs
         for job in jsearch_jobs:
