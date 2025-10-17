@@ -34,4 +34,4 @@ jobs:
         fi
     
     - name: Run job scraper
-      run: python scraper.py
+      run: python job_scraper.py
