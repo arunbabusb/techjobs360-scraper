@@ -92,17 +92,17 @@ class JobScraper:
     
     def post_to_wordpress(self, job_data):
         """Post job to WordPress"""
-        endpoint = f"{self.wp_url}/wp-json/wp/v2/posts"
+        endpoint = f"{self.wp_url}/wp-json/wp/v2/job-listings"
         
         # Create post content
         content = f"""
-        <p><strong>Company:</strong> {job_data.get('company', 'N/A')}</p>
-        <p><strong>Location:</strong> {job_data.get('location', 'N/A')}</p>
-        <p><strong>Description:</strong> {job_data.get('description', 'No description available')}</p>
+        Company: {job_data.get('company', 'N/A')}
+        Location: {job_data.get('location', 'N/A')}
+        Description: {job_data.get('description', 'No description available')}
         """
         
         if job_data.get('redirect_url'):
-            content += f"<p><strong>Apply:</strong> <a href=\"{job_data['redirect_url']}\" target=\"_blank\">Click here to apply</a></p>"
+            content += f"<p>Apply: <a href='{job_data.get('redirect_url')}' target='_blank'>Click here to apply</a></p>"
         
         post_data = {
             'title': job_data.get('title', 'Job Opportunity'),
