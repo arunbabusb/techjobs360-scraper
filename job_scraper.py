@@ -2,10 +2,19 @@
 # -*- coding: utf-8 -*-
 
 """
-Real Job Scraper -> WordPress (WP Job Manager)
-- Uses Application Passwords (admintech) for WP REST auth
-- Fetches jobs from JSearch (RapidAPI) and Adzuna
-- Posts to /wp-json/wp/v2/job-listings (WP Job Manager CPT)
+One-file Job Scraper → WordPress (WP Job Manager)
+-------------------------------------------------
+- Auth: WordPress Application Passwords (admintech)
+- Fetchers: JSearch (RapidAPI) + Adzuna (optional)
+- Posting: /wp-json/wp/v2/job-listings (WP Job Manager CPT)
+- Dedup: persistent file posted_jobs.json
+- Automation: run continuously every 30 minutes or once
+
+HOW TO USE (ELI5):
+1) Put this file as job_scraper.py
+2) Edit the CONFIG below (set your keys)
+3) Run once:      python3 job_scraper.py
+   Run forever:   python3 job_scraper.py --loop
 """
 
 import os
@@ -14,48 +23,52 @@ import json
 import time
 import logging
 from typing import Dict, List, Optional
+import argparse
 
 import requests
 from requests.adapters import HTTPAdapter, Retry
 from requests.auth import HTTPBasicAuth
 
-# ----------------------------
-# 1) REQUIRED: Your WordPress creds (as you provided)
-# ----------------------------
-WP_BASE_URL     = "https://techjobs360.com"          # your site
-WP_USER         = "admintech"                        # admin user
-WP_APP_PASSWORD = "ANzY y4CQ MqjP wgXm 7GLo PUzF"    # Application Password with spaces (valid)
+# ------------------------------------------------------------
+# CONFIG (edit these)
+# ------------------------------------------------------------
 
-# ----------------------------
-# 2) OPTIONAL: Adzuna keys (add later if you want Adzuna jobs)
-# ----------------------------
-ADZUNA_APP_ID   = os.getenv("ADZUNA_APP_ID", "")     # e.g., "your_adzuna_app_id"
-ADZUNA_APP_KEY  = os.getenv("ADZUNA_APP_KEY", "")    # e.g., "your_adzuna_app_key"
+# Your site + WordPress credentials (as you provided)
+WP_BASE_URL     = "https://techjobs360.com"
+WP_USER         = "admintech"                                 # Admin username
+WP_APP_PASSWORD = "ANzY y4CQ MqjP wgXm 7GLo PUzF"             # Application Password (with spaces)
 
-# Query tuning (safe defaults)
-COUNTRIES               = os.getenv("COUNTRIES", "in,us,fr,gb,de").split(",")
-ADZUNA_WHAT             = os.getenv("ADZUNA_WHAT", "software OR developer OR engineer")
-ADZUNA_RESULTS_PER_PAGE = int(os.getenv("ADZUNA_RESULTS_PER_PAGE", "20"))
-ADZUNA_MAX_DAYS_OLD     = int(os.getenv("ADZUNA_MAX_DAYS_OLD", "3"))
-
-# ----------------------------
-# 3) REQUIRED: JSearch (RapidAPI)
-# ----------------------------
-JSEARCH_API_KEY = os.getenv("JSEARCH_API_KEY", "")               # add your RapidAPI key in the runner/secrets
+# JSearch (RapidAPI) — REQUIRED for fetching from JSearch
+# Put your key here or set an env var JSEARCH_API_KEY
+JSEARCH_API_KEY = os.getenv("JSEARCH_API_KEY", "").strip()
 JSEARCH_HOST    = os.getenv("JSEARCH_HOST", "jsearch.p.rapidapi.com")
 JSEARCH_QUERY   = os.getenv("JSEARCH_QUERY", "software developer OR data engineer")
-JSEARCH_NUM_PAGES = int(os.getenv("JSEARCH_NUM_PAGES", "2"))
+JSEARCH_NUM_PAGES = int(os.getenv("JSEARCH_NUM_PAGES", "2"))  # increase to 3 for more results
 
-# ----------------------------
-# REST endpoints
-# ----------------------------
+# Adzuna — OPTIONAL (set keys if you want Adzuna feed too)
+ADZUNA_APP_ID   = os.getenv("ADZUNA_APP_ID", "").strip()
+ADZUNA_APP_KEY  = os.getenv("ADZUNA_APP_KEY", "").strip()
+COUNTRIES       = os.getenv("COUNTRIES", "in,us,fr,gb,de").split(",")
+ADZUNA_WHAT     = os.getenv("ADZUNA_WHAT", "software OR developer OR engineer")
+ADZUNA_RESULTS_PER_PAGE = int(os.getenv("ADZUNA_RESULTS_PER_PAGE", "20"))
+ADZUNA_MAX_DAYS_OLD     = int(os.getenv("ADZUNA_MAX_DAYS_OLD", "3"))  # widen to 7 if needed
+
+# Automation interval (seconds) — 30 minutes by default
+LOOP_INTERVAL_SEC = int(os.getenv("LOOP_INTERVAL_SEC", "1800"))
+
+# Persistence file for dedup across runs
+DEDUP_FILE = os.getenv("DEDUP_FILE", "posted_jobs.json")
+
+# ------------------------------------------------------------
+# REST endpoints (WP Job Manager CPT)
+# ------------------------------------------------------------
 WP_API_ROOT       = f"{WP_BASE_URL}/wp-json/wp/v2"
-WP_JOB_ENDPOINT   = f"{WP_API_ROOT}/job-listings"    # WP Job Manager CPT REST base
+WP_JOB_ENDPOINT   = f"{WP_API_ROOT}/job-listings"
 WP_MEDIA_ENDPOINT = f"{WP_API_ROOT}/media"
 
-# ----------------------------
+# ------------------------------------------------------------
 # Logging
-# ----------------------------
+# ------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -63,21 +76,48 @@ logging.basicConfig(
 )
 log = logging.getLogger("job_scraper")
 
+# ------------------------------------------------------------
+# HTTP session with retries
+# ------------------------------------------------------------
 def new_session() -> requests.Session:
     s = requests.Session()
-    retries = Retry(total=4, backoff_factor=0.6,
-                    status_forcelist=[429, 500, 502, 503, 504],
-                    allowed_methods=["GET", "POST"])
+    retries = Retry(
+        total=4, backoff_factor=0.6,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET", "POST"]
+    )
     s.mount("https://", HTTPAdapter(max_retries=retries))
     s.mount("http://", HTTPAdapter(max_retries=retries))
     return s
 
 S = new_session()
 
-# ----------------------------
+# ------------------------------------------------------------
+# Helpers: dedup persistence
+# ------------------------------------------------------------
+def load_dedup() -> Dict[str, Dict]:
+    try:
+        if os.path.exists(DEDUP_FILE):
+            with open(DEDUP_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def save_dedup(store: Dict[str, Dict]) -> None:
+    try:
+        with open(DEDUP_FILE, "w", encoding="utf-8") as f:
+            json.dump(store, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log.warning(f"Could not write dedup file: {e}")
+
+# ------------------------------------------------------------
 # Auth sanity (prevents 401 surprises)
-# ----------------------------
+# ------------------------------------------------------------
 def verify_wp_auth() -> bool:
+    """
+    Verify credentials using /users/me (requires valid Application Password).
+    """
     r = S.get(f"{WP_API_ROOT}/users/me",
               auth=HTTPBasicAuth(WP_USER, WP_APP_PASSWORD), timeout=20)
     if r.status_code == 200:
@@ -92,9 +132,9 @@ def verify_wp_auth() -> bool:
         )
         return False
 
-# ----------------------------
+# ------------------------------------------------------------
 # Normalization: map different feeds to a common job dict
-# ----------------------------
+# ------------------------------------------------------------
 def normalize_job(raw: Dict) -> Dict:
     title = raw.get("job_title") or raw.get("title")
     description = raw.get("job_description") or raw.get("description") or ""
@@ -123,9 +163,9 @@ def normalize_job(raw: Dict) -> Dict:
         "external_id": raw.get("id") or raw.get("job_id"),
     }
 
-# ----------------------------
-# Dedupe (title + company)
-# ----------------------------
+# ------------------------------------------------------------
+# Dedupe via WP REST search (title + company) & local memory
+# ------------------------------------------------------------
 def wp_search_existing(title: str, company: Optional[str]) -> Optional[Dict]:
     try:
         params = {"search": f"{title} {company or ''}".strip(), "per_page": 5}
@@ -140,9 +180,9 @@ def wp_search_existing(title: str, company: Optional[str]) -> Optional[Dict]:
     except Exception:
         return None
 
-# ----------------------------
+# ------------------------------------------------------------
 # Optional: upload logo and attach as featured image
-# ----------------------------
+# ------------------------------------------------------------
 def wp_upload_logo(logo_url: str) -> Optional[int]:
     if not logo_url:
         return None
@@ -163,9 +203,9 @@ def wp_upload_logo(logo_url: str) -> Optional[int]:
     except Exception:
         return None
 
-# ----------------------------
+# ------------------------------------------------------------
 # Post one job to WPJM
-# ----------------------------
+# ------------------------------------------------------------
 def wp_post_job(job: Dict) -> Optional[Dict]:
     payload = {
         "title": job["title"] or "Untitled Job",
@@ -176,7 +216,6 @@ def wp_post_job(job: Dict) -> Optional[Dict]:
             "_job_location": job.get("location"),
             "_application": job.get("apply_url"),
             "_job_salary": job.get("salary"),
-            # You can add more WPJM fields into meta if you use them
         }
     }
     if job.get("deadline_iso"):
@@ -200,9 +239,9 @@ def wp_post_job(job: Dict) -> Optional[Dict]:
         log.error(f"Error posting to WordPress: {r.status_code} - {r.text[:400]}")
         return None
 
-# ----------------------------
+# ------------------------------------------------------------
 # Fetchers: JSearch (RapidAPI) and Adzuna
-# ----------------------------
+# ------------------------------------------------------------
 def fetch_from_jsearch() -> List[Dict]:
     if not JSEARCH_API_KEY:
         log.warning("JSearch API key missing; skipping JSearch fetch.")
@@ -244,9 +283,9 @@ def fetch_from_adzuna(country: str) -> List[Dict]:
         j["source"] = "Adzuna"
     return results
 
-# ----------------------------
+# ------------------------------------------------------------
 # Verify recent WP items (for your confidence)
-# ----------------------------
+# ------------------------------------------------------------
 def print_recent_wp_listings(n: int = 5):
     r = S.get(f"{WP_JOB_ENDPOINT}?per_page={n}", timeout=20)
     if r.status_code != 200:
@@ -262,72 +301,105 @@ def print_recent_wp_listings(n: int = 5):
         link = j.get("link")
         log.info(f"- {j.get('id')} | {title} | {link}")
 
-# ----------------------------
-# Main
-# ----------------------------
-def main():
+# ------------------------------------------------------------
+# One run
+# ------------------------------------------------------------
+def run_once():
     log.info("Starting job scraper...")
 
-    # Verify WP REST root (reachability)
-    try:
-        root = S.get(WP_API_ROOT, timeout=20)
-        if root.status_code != 200:
-            log.error(f"WordPress REST unreachable: {root.status_code}")
-            return
-        log.info("WordPress REST reachable ✅")
-    except Exception as e:
-        log.exception(f"WP REST error: {e}")
+    # WP REST reachability
+    root = S.get(WP_API_ROOT, timeout=20)
+    if root.status_code != 200:
+        log.error(f"WordPress REST unreachable: {root.status_code}")
         return
+    log.info("WordPress REST reachable ✅")
 
-    # Verify auth (prevents 401 later)
+    # Auth check prevents 401 later
     if not verify_wp_auth():
         return
+    # Load dedup store
+    dedup_store = load_dedup()  # dict keyed by external_id or title|company
 
-    # Fetch jobs
     all_jobs: List[Dict] = []
-    log.info(f"Fetching jobs from countries: {', '.join(COUNTRIES)}")
-
-    # Adzuna by country
-    for cc in COUNTRIES:
-        cc = cc.strip()
-        log.info(f"Fetching jobs from Adzuna for country: {cc}")
-        adz = fetch_from_adzuna(cc)
-        log.info(f"Fetched {len(adz)} jobs from Adzuna ({cc})")
-        for x in adz:
-            all_jobs.append(normalize_job(x))
-
-    # JSearch
-    log.info("Fetching jobs from JSearch...")
-    js = fetch_from_jsearch()
-    log.info(f"Fetched {len(js)} jobs from JSearch")
-    for x in js:
-        all_jobs.append(normalize_job(x))
-
-    # Post with dedupe
     skipped_missing = 0
     skipped_duplicates = 0
     posted_count = 0
 
+    # Adzuna loop
+    log.info(f"Fetching jobs from countries: {', '.join(COUNTRIES)}")
+    for cc in COUNTRIES:
+        cc = cc.strip()
+        log.info(f"Fetching jobs from Adzuna for country: {cc}")
+        adz_jobs = fetch_from_adzuna(cc)
+        log.info(f"Fetched {len(adz_jobs)} jobs from Adzuna ({cc})")
+        for raw in adz_jobs:
+            all_jobs.append(normalize_job(raw))
+
+    # JSearch
+    log.info("Fetching jobs from JSearch...")
+    js_jobs = fetch_from_jsearch()
+    log.info(f"Fetched {len(js_jobs)} jobs from JSearch")
+    for raw in js_jobs:
+        all_jobs.append(normalize_job(raw))
+
+    # Post with dedup
     for job in all_jobs:
+        # require essential fields
         if not (job.get("title") and job.get("apply_url")):
             skipped_missing += 1
             continue
-        if wp_search_existing(job["title"], job.get("company")):
+        # local key: prefer external_id; else title|company
+        dedup_key = job.get("external_id") or f"{job.get('title','').strip()}|{job.get('company','').strip()}"
+
+        # skip if in our local store
+        if dedup_key and dedup_key in dedup_store:
             skipped_duplicates += 1
             continue
-        if wp_post_job(job):
+
+        # skip if found via REST search
+        if wp_search_existing(job["title"], job.get("company")):
+            skipped_duplicates += 1
+            dedup_store[dedup_key] = {"seen": True}
+            continue
+
+        # post
+        created = wp_post_job(job)
+        if created:
             posted_count += 1
+            dedup_store[dedup_key] = {"posted_id": created.get("id")}
         time.sleep(1.0)
 
+    # Save dedup
+    save_dedup(dedup_store)
+
+    # Summary & recent items
     log.info(
         f"Summary → fetched_total={len(all_jobs)} | "
         f"skipped_missing={skipped_missing} | "
         f"skipped_duplicates={skipped_duplicates} | "
         f"posted={posted_count}"
     )
-
-    # Show latest posts to confirm
     print_recent_wp_listings(n=5)
 
+# ------------------------------------------------------------
+# Continuous loop (every 30 minutes)
+# ------------------------------------------------------------
+def run_forever(interval_sec: int = LOOP_INTERVAL_SEC):
+    while True:
+        run_once()
+        log.info(f"Sleeping for {interval_sec//60} minutes...")
+        time.sleep(interval_sec)
+
+# ------------------------------------------------------------
+# Entry point
+# ------------------------------------------------------------
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Job Scraper -> WP Job Manager")
+    parser.add_argument("--loop", action="store_true", help="Run continuously every 30 minutes")
+    args = parser.parse_args()
+
+    if args.loop:
+        run_forever()
+    else:
+        run_once()
+``
