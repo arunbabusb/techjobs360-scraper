@@ -1,0 +1,46 @@
+name: Diagnose WP auth & workflow setup
+
+on:
+  workflow_dispatch:  # lets you run it manually
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Validate secrets exist
+        env:
+          HAS_USER: ${{ secrets.WP_USER }}
+          HAS_PASS: ${{ secrets.WP_APP_PASSWORD }}
+        run: |
+          if [ -z "${HAS_USER}" ] || [ -z "${HAS_PASS}" ]; then
+            echo "❌ Missing secrets. Please add WP_USER and WP_APP_PASSWORD in Settings → Secrets and variables → Actions."
+            exit 1
+          else
+            echo "✅ Found WP_USER and WP_APP_PASSWORD secrets."
+          fi
+
+      - name: Test WordPress auth (/users/me)
+        env:
+          WP_BASE_URL: https://techjobs360.com
+          WP_USER: ${{ secrets.WP_USER }}
+          WP_APP_PASSWORD: "${{ secrets.WP_APP_PASSWORD }}"
+        run: |
+          echo "Testing WordPress auth for user '${WP_USER}' ..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -u "${WP_USER}:${WP_APP_PASSWORD}" \
+            "${WP_BASE_URL}/wp-json/wp/v2/users/me")
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ Auth failed (HTTP $STATUS). Recreate the Application Password for the 'admintech' user and update the secret."
+            exit 1
+          else
+            echo "✅ Auth OK (HTTP 200)."
+          fi
+
+      - name: Final note
+        run: |
+          echo "If auth is OK, you can run your main workflow (run-scraper.yml)."
+          echo "If you still get a popup, copy its exact text here and I’ll fix it."
