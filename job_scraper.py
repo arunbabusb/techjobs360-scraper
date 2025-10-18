@@ -14,8 +14,8 @@ class JobScraper:
         self.wp_password = os.getenv('WP_APP_PASSWORD')
         
         # API Keys from environment variables
-        self.adzuna_app_id = '6e27536a'
-        self.adzuna_api_key = '4e216b84d2a29d5a815a765fde36ad61'
+        self.adzuna_app_id = os.getenv('ADZUNA_APP_ID')
+        self.adzuna_api_key = os.getenv('ADZUNA_APP_KEY')
         self.jsearch_api_key = os.getenv('JSEARCH_API_KEY')
         
         # Track posted jobs to avoid duplicates
@@ -113,7 +113,7 @@ class JobScraper:
         """
         
         if job_data.get('redirect_url'):
-            content += f"<p>Apply: <a href=\"{job_data.get('redirect_url')}\" target=\"_blank\">Click here to apply</a></p>"
+            content += f"<p>Apply: <a href='{job_data.get('redirect_url')}' target='_blank'>Click here to apply</a></p>"
         
         post_data = {
             'title': job_data.get('title', 'Job Opportunity'),
