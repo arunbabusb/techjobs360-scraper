@@ -260,6 +260,7 @@ def wp_upload_logo(logo_url: str) -> Optional[int]:
 # -----------------
 
 def wp_post_job(job: Dict) -> Optional[Dict]:
+    global WP_JOB_ENDPOINT
     # Phase 1: create the post minimally
     payload = {
         "title": job.get("title") or "Untitled Job",
@@ -292,7 +293,6 @@ def wp_post_job(job: Dict) -> Optional[Dict]:
         if rr.status_code in (200, 201):
             created = rr.json()
             # Switch global endpoint to fallback for subsequent calls
-            global WP_JOB_ENDPOINT
             WP_JOB_ENDPOINT = alt
             return _update_job_meta(created, job)
         else:
