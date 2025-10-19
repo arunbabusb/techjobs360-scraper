@@ -1,27 +1,15 @@
-name: Job Scraper
-
-on:
-  schedule:
-    - cron: '0 */2 * * *'
-  workflow_dispatch:
-
-jobs:
-  scrape:
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      
-      - name: Run scraper
+- name: Commit and push new jobs
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          git add ${{ env.DEDUP_FILE || 'posted_jobs.json' }}
+          
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No new jobs to commit."
+          else
+            git commit -m "📊 Update job list"
+            git push
+          fi
         env:
-          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-        run: python job_scraper.py
+          DEDUP_FILE: ${{ secrets.DEDUP_FILE }}
