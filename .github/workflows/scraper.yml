@@ -1,4 +1,43 @@
-- name: Commit and push new jobs
+name: Scrape Jobs
+
+# 1. ADDED THIS: Gives the action permission to save files.
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: # Lets you run it manually from the "Actions" tab
+  schedule:
+    - cron: '0 */6 * * *' # Runs automatically every 6 hours
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      # This step checks out your repository's code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # This step sets up the Python version
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      # This step installs your "requirements.txt" libraries
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # This step runs your scraper
+      - name: Run Python scraper
+        run: python job_scraper.py
+        env:
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+
+      # 2. FIXED THIS STEP: This saves your posted_jobs.json file
+      - name: Commit and push new jobs
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
