@@ -63,9 +63,22 @@ def load_dedup() -> Dict[str, Dict]:
     try:
         if os.path.exists(DEDUP_FILE):
             with open(DEDUP_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                
+                # --- START OF FIX ---
+                # Check if the loaded data is a dictionary.
+                # If it's a list (from an old bug), reset it.
+                if isinstance(data, dict):
+                    return data
+                else:
+                    log.warning(f"Dedup file was a {type(data)}, not a dict. Resetting.")
+                    return {}
+                # --- END OF FIX ---
+                
     except Exception as e:
-        log.warning(f"Could not load dedup file: {e}")
+        log.warning(f"Could not load dedup file ({e}), starting fresh.")
+    
+    # This is the default if the file doesn't exist or is empty
     return {}
 
 def save_dedup(store: Dict[str, Dict]) -> None:
