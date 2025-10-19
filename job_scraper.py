@@ -20,7 +20,7 @@ WP_USER = "admintech"
 WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD", "")
 
 # JSearch (RapidAPI)
-JSEARCH_API_KEY = "90644e44cbmsh58171cfd7ff5cb0p17d1d9jsn0572d579be41"
+JSEARCH_API_KEY = os.getenv("JSEARCH_API_KEY", "")
 JSEARCH_HOST = "jsearch.p.rapidapi.com"
 JSEARCH_QUERY = "software engineer"
 JSEARCH_COUNTRY = "in"
@@ -206,7 +206,7 @@ def wp_search_existing(title: str, company: Optional[str]) -> Optional[Dict]:
             if title_words and item_words:
                 overlap = len(title_words & item_words) / max(len(title_words), len(item_words))
                 if overlap >= 0.8:
-                    log.debug(f"Found existing job (fuzzy match {overlap*100:.0f}%): {title}")
+                    log.debug(f"Found existing job (fuzzy match {overlap * 100:.0f}%): {title}")
                     return item
         
         return None
@@ -275,7 +275,7 @@ def wp_post_job(job: Dict) -> Optional[Dict]:
     
     if r.status_code == 404:
         alt = f"{WP_API_ROOT}/{WP_JOB_ROUTE_FALLBACK}"
-        log.warning(f"⚠️ Primary route returned 404; trying fallback...")
+        log.warning("⚠️ Primary route returned 404; trying fallback...")
         
         rr = S.post(
             alt,
@@ -356,7 +356,7 @@ def fetch_from_jsearch() -> List[Dict]:
         "country": JSEARCH_COUNTRY,
     }
     
-    log.info(f"🔍 Fetching jobs from JSearch...")
+    log.info("🔍 Fetching jobs from JSearch...")
     log.info(f"   Query: {JSEARCH_QUERY}")
     log.info(f"   Country: {JSEARCH_COUNTRY}")
     log.info(f"   Pages: {JSEARCH_NUM_PAGES}")
@@ -412,7 +412,7 @@ def run_once():
         if root.status_code != 200:
             log.error(f"❌ WordPress REST unreachable: {root.status_code}")
             return
-        log.info(f"✅ WordPress REST is reachable")
+        log.info("✅ WordPress REST is reachable")
     except Exception as e:
         log.error(f"❌ WordPress REST error: {e}")
         return
@@ -438,14 +438,16 @@ def run_once():
         log.error("❌ No jobs fetched! Check your API key, query, or country filters")
         return
 
-    log.info(f"📤 Attempting to post jobs...")
+    log.info("📤 Attempting to post jobs...")
     for idx, job in enumerate(all_jobs, 1):
         if not (job.get("title") and job.get("apply_url")):
             skipped_missing += 1
             log.debug(f"Skipped {idx}: Missing title or apply_url")
             continue
         
-        dedup_key = job.get("external_id") or f"{(job.get('title','') or '').strip()}|{(job.get('company','') or '').strip()}"
+        title = (job.get('title', '') or '').strip()
+        company = (job.get('company', '') or '').strip()
+        dedup_key = job.get("external_id") or f"{title}|{company}"
         
         if dedup_key and dedup_key in dedup_store:
             skipped_duplicates += 1
