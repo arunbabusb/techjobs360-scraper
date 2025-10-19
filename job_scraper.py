@@ -15,17 +15,17 @@ from requests.adapters import HTTPAdapter, Retry
 from requests.auth import HTTPBasicAuth
 
 # CONFIG
-WP_BASE_URL = os.getenv("WP_BASE_URL", "https://techjobs360.com").rstrip('/')
-WP_USER = os.getenv("WP_USER", "")
+WP_BASE_URL = "https://techjobs360.com"
+WP_USER = "admintech"
 WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD", "")
 
 # JSearch (RapidAPI)
-JSEARCH_API_KEY = os.getenv("JSEARCH_API_KEY", "").strip()
-JSEARCH_HOST = os.getenv("JSEARCH_HOST", "jsearch.p.rapidapi.com").strip()
-JSEARCH_QUERY = os.getenv("JSEARCH_QUERY", "software engineer").strip()
-JSEARCH_COUNTRY = os.getenv("JSEARCH_COUNTRY", "in").strip()
-JSEARCH_NUM_PAGES = int(os.getenv("JSEARCH_NUM_PAGES", "5"))
-JSEARCH_DATE_POSTED = os.getenv("JSEARCH_DATE_POSTED", "week")
+JSEARCH_API_KEY = "90644e44cbmsh58171cfd7ff5cb0p17d1d9jsn0572d579be41"
+JSEARCH_HOST = "jsearch.p.rapidapi.com"
+JSEARCH_QUERY = "software engineer"
+JSEARCH_COUNTRY = "in"
+JSEARCH_NUM_PAGES = 5
+JSEARCH_DATE_POSTED = "week"
 
 LOOP_INTERVAL_SEC = int(os.getenv("LOOP_INTERVAL_SEC", "1800"))
 DEDUP_FILE = os.getenv("DEDUP_FILE", "posted_jobs.json")
@@ -210,7 +210,7 @@ def wp_upload_logo(logo_url: str) -> Optional[int]:
         if r_img.status_code != 200 or not r_img.content:
             return None
         
-        # FIXED LINE 278: Changed split("/"[-1] to split("/")[-1]
+        # FIXED: Changed split("/"[-1] to split("/")[-1]
         filename = (logo_url.split("?")[0].split("/")[-1] or f"logo-{int(time.time())}.png").replace('"', "")
         headers = {
             "Content-Disposition": f'attachment; filename="{filename}"',
