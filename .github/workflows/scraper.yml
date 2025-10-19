@@ -1,11 +1,8 @@
 name: Job Scraper
 
 on:
-  # Run every 2 hours
   schedule:
     - cron: '0 */2 * * *'
-  
-  # Also allow manual trigger (click a button)
   workflow_dispatch:
 
 jobs:
@@ -26,13 +23,5 @@ jobs:
       
       - name: Run scraper
         env:
-          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
-          WP_USER: ${{ secrets.WP_USER }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-          JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}
-          JSEARCH_HOST: jsearch.p.rapidapi.com
-          JSEARCH_QUERY: software engineer
-          JSEARCH_COUNTRY: in
-          JSEARCH_NUM_PAGES: 5
-          JSEARCH_DATE_POSTED: week
         run: python job_scraper.py
