@@ -33,6 +33,6 @@ jobs:
           JSEARCH_HOST: jsearch.p.rapidapi.com
           JSEARCH_QUERY: software engineer
           JSEARCH_COUNTRY: in
-          JSEARCH_NUM_PAGES: 2
+          JSEARCH_NUM_PAGES: 5
           JSEARCH_DATE_POSTED: week
         run: python job_scraper.py
