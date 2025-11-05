@@ -33,190 +33,273 @@ JSEARCH_NUM_PAGES = 5
 JSEARCH_DATE_POSTED = "week"
 LOOP_INTERVAL_SEC = int(os.getenv("LOOP_INTERVAL_SEC", "1800"))
 DEDUP_FILE = os.getenv("DEDUP_FILE", "posted_jobs.json")
+
 # REST endpoints
-WP_API_ROOT = f"{WP_BASE_URL}/wp-json/wp/v2"
-WP_JOB_ROUTE_PRIMARY = "job-listings"
-WP_JOB_ROUTE_FALLBACK = "job_listing"
-# Logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
-log = logging.getLogger("job_scraper")
+WP_JOB_ENDPOINT = f"{WP_BASE_URL}/wp-json/wp/v2/job_listing"
+WP_MEDIA_ENDPOINT = f"{WP_BASE_URL}/wp-json/wp/v2/media"
 
-# HTTP session
-def new_session() -> requests.Session:
-    s = requests.Session()
-    retries = Retry(total=4, backoff_factor=0.6, status_forcelist=[429, 500, 502, 503, 504], allowed_methods=["GET", "POST", "PUT"])
-    s.mount("https://", HTTPAdapter(max_retries=retries))
-    s.mount("http://", HTTPAdapter(max_retries=retries))
-    return s
-S = new_session()
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+log = logging.getLogger(__name__)
 
-# Dedup persistence
-# --- Dedup structure: {external_id: {"title":..., "company":..., "posted":<timestamp>}} ---
-def load_dedup() -> Dict[str, Dict]:
+# Session with retries
+S = requests.Session()
+retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+S.mount("https://", HTTPAdapter(max_retries=retries))
+S.mount("http://", HTTPAdapter(max_retries=retries))
+
+def load_dedup() -> Dict:
+    """Load deduplication store from file."""
+    if not os.path.exists(DEDUP_FILE):
+        return {}
     try:
-        if os.path.exists(DEDUP_FILE):
-            with open(DEDUP_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    return data
+        with open(DEDUP_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
     except Exception as e:
-        log.warning(f"Could not load dedup file ({e}), starting fresh.")
-    return {}
-def save_dedup(store: Dict[str, Dict]) -> None:
+        log.warning(f"Failed to load dedup file: {e}")
+        return {}
+
+def save_dedup(store: Dict):
+    """Save deduplication store to file."""
     try:
         with open(DEDUP_FILE, "w", encoding="utf-8") as f:
-            json.dump(store, f, ensure_ascii=False, indent=2)
-        log.info(f"Dedup store saved with {len(store)} entries")
+            json.dump(store, f, indent=2)
     except Exception as e:
-        log.warning(f"Could not write dedup file: {e}")
+        log.error(f"Failed to save dedup file: {e}")
 
-# Auth verification, endpoint resolution, and other utility functions remain unchanged...
-# ... (unchanged code elided for brevity)
-
-# --- Replace only the parts that interact with jobs/WordPress with improved logic ---
+def fetch_from_jsearch() -> List[Dict]:
+    """
+    Fetch jobs from JSearch API.
+    Returns list of raw job data dictionaries.
+    """
+    all_jobs = []
+    headers = {
+        "X-RapidAPI-Key": JSEARCH_API_KEY,
+        "X-RapidAPI-Host": JSEARCH_HOST
+    }
+    
+    for page in range(1, JSEARCH_NUM_PAGES + 1):
+        try:
+            url = "https://jsearch.p.rapidapi.com/search"
+            params = {
+                "query": JSEARCH_QUERY,
+                "page": str(page),
+                "num_pages": "1",
+                "date_posted": JSEARCH_DATE_POSTED,
+            }
+            if JSEARCH_COUNTRY:
+                params["country"] = JSEARCH_COUNTRY
+                
+            log.info(f"Fetching JSearch page {page}...")
+            r = S.get(url, headers=headers, params=params, timeout=30)
+            
+            if r.status_code == 200:
+                data = r.json()
+                jobs = data.get("data", [])
+                log.info(f"Got {len(jobs)} jobs from page {page}")
+                all_jobs.extend(jobs)
+            else:
+                log.warning(f"JSearch API returned status {r.status_code}")
+                
+            time.sleep(1)  # Rate limiting
+        except Exception as e:
+            log.error(f"Error fetching JSearch page {page}: {e}")
+            
+    return all_jobs
 
 def normalize_job(raw: Dict) -> Dict:
-    # Only include non-sensitive fields
-    title = raw.get("job_title") or raw.get("title")
-    company = raw.get("employer_name") or raw.get("company") or (raw.get("company", {}) or {}).get("display_name")
-    location = raw.get("job_city") or raw.get("job_country") or (raw.get("location") or {}).get("display_name") or raw.get("location")
-    description = raw.get("job_description") or raw.get("description") or ""
-    logo_url = raw.get("employer_logo") or raw.get("logo_url")
-    job_id = raw.get("id") or raw.get("job_id")
-    deadline = raw.get("job_offer_expiration_datetime_utc") or raw.get("deadline_iso")
+    """
+    Extract and normalize ONLY public, non-sensitive job fields.
+    NO personal information, email, phone, user data!
+    Adds source attribution.
+    """
     return {
-        "title": title,
-        "description": description,
-        "company": company,
-        "location": location,
-        "logo_url": logo_url,
-        "deadline_iso": deadline,
-        "source": raw.get("source") or raw.get("job_publisher"),
-        "external_id": job_id,
-        # No personal information, email, phone, user data!
+        "external_id": raw.get("job_id", ""),
+        "title": raw.get("job_title", ""),
+        "company": raw.get("employer_name", ""),
+        "logo_url": raw.get("employer_logo"),
+        "location": raw.get("job_city") or raw.get("job_state") or raw.get("job_country", ""),
+        "description": raw.get("job_description", ""),
+        "employment_type": raw.get("job_employment_type", ""),
+        "posted_at": raw.get("job_posted_at_datetime_utc"),
+        "expires_at": raw.get("job_offer_expiration_datetime_utc"),
+        "apply_link": raw.get("job_apply_link"),
+        "source": raw.get("job_publisher", "JSearch API"),
+        # Source attribution for compliance
+        "attribution": f"Powered by JSearch API. Source: {raw.get('job_publisher', 'Unknown')}"
     }
 
-def is_job_expired(job: Dict) -> bool:
-    # Use deadline/expire logic if available
-    exp = job.get("deadline_iso")
-    if exp:
-        try:
-            t_exp = int(time.mktime(time.strptime(exp[:19], "%Y-%m-%dT%H:%M:%S")))
-            return t_exp < int(time.time())
-        except:
-            return False
+def is_duplicate(job: Dict, dedup_store: Dict) -> bool:
+    """
+    Check if job already posted.
+    Deduplication by external_id AND by title+company combo.
+    """
+    ext_id = job.get("external_id")
+    title = job.get("title", "").strip().lower()
+    company = job.get("company", "").strip().lower()
+    
+    # Check external ID
+    if ext_id and ext_id in dedup_store:
+        return True
+    
+    # Check title+company combo
+    combo_key = f"{title}||{company}"
+    if combo_key in dedup_store.get("combos", []):
+        return True
+        
     return False
 
-# Dedup logic: skip job if external_id exists, or (title+company) combo exists
-
-def is_duplicate(job, dedup_store):
-    eid = job.get("external_id")
-    t = (job.get("title") or "").strip().lower()
-    c = (job.get("company") or "").strip().lower()
-    for v in dedup_store.values():
-        if ((v.get("title") or "").strip().lower() == t and (v.get("company") or "").strip().lower() == c):
-            return True
-    return eid in dedup_store
-
-# Post job to WPJM (with alt text, source attr, no post if dup or expired)
-def wp_post_job(job: Dict, dedup_store):
+def wp_post_job(job: Dict, dedup_store: Dict):
+    """
+    Post job to WordPress if not duplicate.
+    Includes source attribution field.
+    """
     if is_duplicate(job, dedup_store):
-        log.info(f"Duplicate job, skipping: {job.get('title')} @ {job.get('company')}")
-        return None
-    if is_job_expired(job):
-        log.info(f"Expired job, skipping: {job.get('title')} @ {job.get('company')}")
-        return None
-    payload = {
-        "title": job.get("title") or "Untitled Job",
-        "content": f"{job.get('description', '')}\n\nPowered by JSearch API. Source: {job.get('source', 'Unknown')}",
-        "status": "publish",
-        # Add source attribution to payload, keep only allowed fields!
-        "meta": {
-            "_company_name": job.get("company"),
-            "_job_location": job.get("location"),
-            "_job_deadline": job.get("deadline_iso"),
-            "_source_attribution": f"Powered by JSearch API. Source: {job.get('source', 'Unknown')}"
+        log.info(f"⏭️  Skipping duplicate: {job.get('title')} @ {job.get('company')}")
+        return
+        
+    try:
+        # Upload logo with alt text if available
+        featured_media_id = None
+        if job.get("logo_url"):
+            alt_text = f"{job.get('company', 'Company')} logo"
+            featured_media_id = wp_upload_logo_with_alt(job["logo_url"], alt_text)
+        
+        # Prepare WP post data
+        wp_data = {
+            "title": job.get("title", "Untitled Position"),
+            "content": job.get("description", ""),
+            "status": "publish",
+            "meta": {
+                "_company_name": job.get("company", ""),
+                "_job_location": job.get("location", ""),
+                "_application": job.get("apply_link", ""),
+                "_job_deadline": job.get("expires_at", ""),
+                "_job_source_attribution": job.get("attribution", ""),  # Source attribution!
+            }
         }
-    }
-    # Upload logo with alt text if given
-    logo_url = job.get("logo_url")
-    if logo_url:
-        media_id = wp_upload_logo_with_alt(logo_url, job)
-        if media_id:
-            payload["featured_media"] = media_id
-    r = S.post(WP_JOB_ENDPOINT, auth=HTTPBasicAuth(WP_USER, WP_APP_PASSWORD), headers={"Content-Type": "application/json"}, data=json.dumps(payload), timeout=45)
-    if r.status_code in (200, 201):
-        created = r.json()
-        # Save dedup entry
-        dedup_store[job.get("external_id") or f"{job.get('title')}-{job.get('company')}"] = {
-            "title": job.get("title"), "company": job.get("company"), "posted": int(time.time())
-        }
-        save_dedup(dedup_store)
-        log.info(f"✅ Posted job (ID={created.get('id')})")
-        return created
-    else:
-        log.error(f"❌ Failed to post job: {r.status_code} - {r.text[:400]}")
-        return None
+        
+        if featured_media_id:
+            wp_data["featured_media"] = featured_media_id
+            
+        # Post to WordPress
+        r = S.post(
+            WP_JOB_ENDPOINT,
+            json=wp_data,
+            auth=HTTPBasicAuth(WP_USER, WP_APP_PASSWORD),
+            timeout=40
+        )
+        
+        if r.status_code in (200, 201):
+            post_id = r.json().get("id")
+            log.info(f"✅ Posted: {job.get('title')} @ {job.get('company')} (ID={post_id})")
+            
+            # Update dedup store
+            ext_id = job.get("external_id")
+            if ext_id:
+                dedup_store[ext_id] = int(time.time())
+                
+            # Also track title+company combo
+            if "combos" not in dedup_store:
+                dedup_store["combos"] = []
+            combo_key = f"{job.get('title', '').strip().lower()}||{job.get('company', '').strip().lower()}"
+            if combo_key not in dedup_store["combos"]:
+                dedup_store["combos"].append(combo_key)
+                
+            save_dedup(dedup_store)
+        else:
+            log.error(f"Failed to post job: {r.status_code} - {r.text[:200]}")
+            
+    except Exception as e:
+        log.error(f"Error posting job: {e}")
 
-def wp_upload_logo_with_alt(logo_url: str, job: Dict) -> Optional[int]:
-    # Standard upload, but attach alt text (company name or title)
-    if not logo_url:
-        return None
+def wp_upload_logo_with_alt(logo_url: str, alt_text: str) -> Optional[int]:
+    """
+    Upload company logo to WordPress media library WITH alt text.
+    Alt text is crucial for accessibility compliance.
+    """
     try:
         r_img = S.get(logo_url, timeout=30)
-        if r_img.status_code != 200 or not r_img.content:
+        if r_img.status_code != 200:
             return None
-        filename = (logo_url.split("?")[0].split("/")[-1] or f"logo-{int(time.time())}.png").replace('"', "")
-        alt_text = f"Logo for {job.get('company') or job.get('title') or 'Company'}"
+            
+        filename = logo_url.split("/")[-1].split("?")[0] or "company_logo.png"
+        
         headers = {
             "Content-Disposition": f'attachment; filename="{filename}"',
             "Content-Type": r_img.headers.get("Content-Type", "image/png"),
             "Content-Description": alt_text  # Standard way for alt text in upload to WP
         }
-        r_up = S.post(WP_MEDIA_ENDPOINT, headers=headers, data=r_img.content, auth=HTTPBasicAuth(WP_USER, WP_APP_PASSWORD), timeout=40)
+        
+        r_up = S.post(
+            WP_MEDIA_ENDPOINT,
+            headers=headers,
+            data=r_img.content,
+            auth=HTTPBasicAuth(WP_USER, WP_APP_PASSWORD),
+            timeout=40
+        )
+        
         if r_up.status_code in (200, 201):
             media_id = r_up.json().get("id")
             log.info(f"Uploaded logo (with alt): {filename} (ID={media_id})")
             return media_id
+            
         return None
     except Exception as e:
         log.error(f"Logo upload error: {e}")
         return None
 
-# Remove expired jobs from WPJM:
 def remove_expired_jobs_from_wp():
+    """
+    Remove expired jobs from WordPress based on expiry date.
+    Regular cleanup to maintain job board quality.
+    """
     log.info("Checking for expired jobs in WordPress...")
     try:
         r = S.get(WP_JOB_ENDPOINT, params={"per_page": 50}, timeout=40)
+        
         if r.status_code == 200:
             items = r.json()
+            
             for item in items:
                 meta = item.get("meta") or {}
                 deadline = meta.get("_job_deadline")
                 post_id = item.get("id")
+                
                 if deadline:
                     try:
                         t_exp = int(time.mktime(time.strptime(deadline[:19], "%Y-%m-%dT%H:%M:%S")))
                         if t_exp < int(time.time()):
-                            # Remove
-                            delr = S.delete(f"{WP_JOB_ENDPOINT}/{post_id}", auth=HTTPBasicAuth(WP_USER, WP_APP_PASSWORD), timeout=35)
+                            # Remove expired job
+                            delr = S.delete(
+                                f"{WP_JOB_ENDPOINT}/{post_id}",
+                                auth=HTTPBasicAuth(WP_USER, WP_APP_PASSWORD),
+                                timeout=35
+                            )
                             if delr.status_code in (200, 204, 410):
                                 log.info(f"🗑️ Removed expired job ID={post_id}")
                     except Exception as e:
                         log.warning(f"Failed deadline check for job {post_id}: {e}")
+                        
     except Exception as e:
         log.warning(f"Failed expired job check: {e}")
 
-# MAIN SCHEDULER LOOP (example)
 def main_loop():
+    """
+    Main scheduler loop.
+    Continuously fetches jobs, posts new ones, and removes expired ones.
+    """
     dedup_store = load_dedup()
+    
     while True:
         jobs = fetch_from_jsearch()
+        
         for raw in jobs:
             job = normalize_job(raw)
             # Only keep allowed fields; all privacy logic in normalize_job
             wp_post_job(job, dedup_store)
+            
         remove_expired_jobs_from_wp()  # Regularly call this
+        
         log.info(f"Sleeping {LOOP_INTERVAL_SEC}s until next scrape...")
         time.sleep(LOOP_INTERVAL_SEC)
 
