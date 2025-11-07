@@ -9,7 +9,7 @@ on:
     branches: [ "main" ]
   workflow_dispatch: # Lets you run it manually from the "Actions" tab
   schedule:
-    - cron: '0 */3 * * *' # Runs automatically every 6 hours
+    '0 6,18 * * *' # Runs at 6 AM and 6 PM IST daily (FREE plan optimized)
 
 jobs:
   scrape:
