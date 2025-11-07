@@ -34,8 +34,11 @@ JSEARCH_API_KEY = "11d1b727f2msh1be47752caa8059p147b94jsnd9d66d2e5ecd"
 JSEARCH_HOST = "jsearch.p.rapidapi.com"
 JSEARCH_QUERY = "software engineer"
 JSEARCH_COUNTRY = "in"
-JSEARCH_NUM_PAGES = 5
+JSEARCH_NUM_PAGES = 2  # Reduced for FREE plan (200 req/month)
 JSEARCH_DATE_POSTED = "week"
+
+# FREE PLAN OPTIMIZATION - Disable extra API calls to save quota
+ENABLE_ENHANCED_API = False  # Set to True for paid plans (Pro/Ultra/Mega)
 
 LOOP_INTERVAL_SEC = int(os.getenv("LOOP_INTERVAL_SEC", "1800"))
 DEDUP_FILE = os.getenv("DEDUP_FILE", "posted_jobs.json")
@@ -210,6 +213,11 @@ def enhance_with_api_data(job: Dict) -> Dict:
     job_title = job.get("title", "")
     company = job.get("company", "")
     location = job.get("location", "")
+    
+    # FREE PLAN OPTIMIZATION: Skip extra API calls if disabled
+    if not ENABLE_ENHANCED_API:
+        log.info("Skipping enhanced API calls (FREE plan mode)")
+        return job
     
     # Get detailed job information if job_id available
     if job_id:
@@ -445,6 +453,13 @@ def main_loop():
     """
     log.info("🚀 Starting TechJobs360 Scraper with Enhanced JSearch API Integration")
     log.info("📡 Using endpoints: Job Search, Job Details, Job Salary, Company Job Salary")
+    
+    # Log API mode
+    if ENABLE_ENHANCED_API:
+        log.info("📊 API Mode: FULL (Job Search + Details + Salary + Company Salary)")
+    else:
+        log.info("💰 API Mode: FREE PLAN (Job Search only - 2 pages, 200 req/month)")
+        log.info("💡 Tip: Set ENABLE_ENHANCED_API=True for paid plans (Pro/Ultra/Mega)")
     
     dedup_store = load_dedup()
     
