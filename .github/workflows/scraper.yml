@@ -11,7 +11,7 @@ on:
   schedule:
     # Runs twice daily at 6 AM and 6 PM IST (FREE API friendly)
     # This schedule ensures fresh jobs daily without overwhelming free APIs
-    - cron: '0 6,18 * * *'
+        - cron: '0 0,12 * * *'
 
 jobs:
   scrape:
