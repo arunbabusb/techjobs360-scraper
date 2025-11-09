@@ -3,11 +3,10 @@
 """
 TechJobs360 FREE Job Scraper -> WordPress
 100% FREE - No Paid APIs!
+
 Sources:
-- Remotive.io API (Free)
-- Arbeitnow API (Free)
-- GitHub Jobs RSS (Free)
-- Authentic Jobs API (Free)
+- JSearch API (FREE tier from RapidAPI)
+  Fetches from: LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google for Jobs
 
 Filters: Last 24 hours only
 """
@@ -28,231 +27,298 @@ WP_BASE_URL = "https://techjobs360.com"
 WP_USER = "admintech"
 WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD", "")
 DEDUP_FILE = "posted_jobs.json"
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")  # JSearch API key
 
-# REST endpoints
-WP_JOB_ENDPOINT = f"{WP_BASE_URL}/wp-json/wp/v2/job_listing"
-WP_MEDIA_ENDPOINT = f"{WP_BASE_URL}/wp-json/wp/v2/media"
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-log = logging.getLogger(__name__)
+# Requests session with retry
+session = requests.Session()
+retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+session.mount('https://', HTTPAdapter(max_retries=retries))
+session.mount('http://', HTTPAdapter(max_retries=retries))
 
-# Session with retries
-S = requests.Session()
-retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
-S.mount("https://", HTTPAdapter(max_retries=retries))
-S.mount("http://", HTTPAdapter(max_retries=retries))
 
-def load_dedup() -> Dict:
-    """Load deduplication store."""
-    if not os.path.exists(DEDUP_FILE):
-        return {"ids": [], "combos": []}
+def load_posted_jobs() -> set:
+    """Load previously posted job IDs"""
+    if os.path.exists(DEDUP_FILE):
+        try:
+            with open(DEDUP_FILE, 'r') as f:
+                data = json.load(f)
+                return set(data.get('posted_job_ids', []))
+        except Exception as e:
+            logger.error(f"Error loading posted jobs: {e}")
+    return set()
+
+
+def save_posted_jobs(posted_ids: set):
+    """Save posted job IDs"""
     try:
-        with open(DEDUP_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {"ids": [], "combos": []}
-
-def save_dedup(store: Dict):
-    """Save deduplication store."""
-    try:
-        with open(DEDUP_FILE, "w") as f:
-            json.dump(store, f, indent=2)
+        with open(DEDUP_FILE, 'w') as f:
+            json.dump({'posted_job_ids': list(posted_ids)}, f, indent=2)
     except Exception as e:
-        log.error(f"Failed to save dedup: {e}")
+        logger.error(f"Error saving posted jobs: {e}")
 
-def fetch_from_remotive() -> List[Dict]:
-    """Fetch from Remotive.io API (FREE, no key needed)."""
+
+def generate_job_id(job: Dict) -> str:
+    """Generate unique ID for job based on title + company + location"""
+    title = job.get('job_title', '').lower().strip()
+    company = job.get('employer_name', '').lower().strip()
+    location = job.get('job_city', '').lower().strip()
+    return f"{title}_{company}_{location}".replace(' ', '_')
+
+
+def fetch_jsearch_jobs() -> List[Dict]:
+    """
+    Fetch jobs from JSearch API (FREE tier)
+    Covers: LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google for Jobs
+    """
+    if not RAPIDAPI_KEY:
+        logger.error("RAPIDAPI_KEY not set in environment")
+        return []
+    
     jobs = []
-    try:
-        url = "https://remotive.io/api/remote-jobs"
-        params = {"category": "software-dev", "limit": 50}
-        r = S.get(url, params=params, timeout=30)
-        if r.status_code == 200:
-            data = r.json()
-            for job in data.get("jobs", []):
-                # Filter last 24 hours
-                pub_date = job.get("publication_date", "")
-                if is_within_24_hours(pub_date):
-                    jobs.append({
-                        "title": job.get("title", ""),
-                        "company": job.get("company_name", ""),
-                        "location": job.get("candidate_required_location", "Remote"),
-                        "description": job.get("description", ""),
-                        "url": job.get("url", ""),
-                        "logo": job.get("company_logo"),
-                        "type": job.get("job_type", "Full-time"),
-                        "source": "Remotive.io",
-                        "id": job.get("id")
-                    })
-            log.info(f"Remotive: {len(jobs)} jobs")
-    except Exception as e:
-        log.error(f"Remotive error: {e}")
+    
+    # Search queries for comprehensive coverage
+    search_queries = [
+        "software engineer",
+        "data scientist",
+        "product manager",
+        "full stack developer",
+        "devops engineer"
+    ]
+    
+    url = "https://jsearch.p.rapidapi.com/search"
+    headers = {
+        "X-RapidAPI-Key": RAPIDAPI_KEY,
+        "X-RapidAPI-Host": "jsearch.p.rapidapi.com"
+    }
+    
+    for query in search_queries:
+        try:
+            params = {
+                "query": query,
+                "page": "1",
+                "num_pages": "1",
+                "date_posted": "today"  # Last 24 hours
+            }
+            
+            logger.info(f"Fetching JSearch jobs for: {query}")
+            response = session.get(url, headers=headers, params=params, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                job_results = data.get('data', [])
+                
+                logger.info(f"Found {len(job_results)} jobs for '{query}'")
+                
+                for job in job_results:
+                    # Extract and normalize job data
+                    normalized_job = {
+                        'job_title': job.get('job_title', 'Not specified'),
+                        'employer_name': job.get('employer_name', 'Not specified'),
+                        'employer_logo': job.get('employer_logo', ''),
+                        'job_city': job.get('job_city', ''),
+                        'job_state': job.get('job_state', ''),
+                        'job_country': job.get('job_country', ''),
+                        'job_description': job.get('job_description', ''),
+                        'job_apply_link': job.get('job_apply_link', ''),
+                        'job_posted_at_datetime_utc': job.get('job_posted_at_datetime_utc', ''),
+                        'source': 'JSearch API',
+                        'job_employment_type': job.get('job_employment_type', 'FULLTIME'),
+                        'job_is_remote': job.get('job_is_remote', False),
+                    }
+                    
+                    jobs.append(normalized_job)
+                
+                # Rate limit: FREE tier allows 5 requests per second
+                time.sleep(1)
+                
+            elif response.status_code == 429:
+                logger.warning(f"Rate limit hit for '{query}' - skipping")
+                time.sleep(5)
+            else:
+                logger.error(f"JSearch API error for '{query}': {response.status_code}")
+                
+        except Exception as e:
+            logger.error(f"Error fetching JSearch jobs for '{query}': {e}")
+            continue
+    
     return jobs
 
-def fetch_from_arbeitnow() -> List[Dict]:
-    """Fetch from Arbeitnow API (FREE, no key needed)."""
-    jobs = []
-    try:
-        url = "https://www.arbeitnow.com/api/job-board-api"
-        r = S.get(url, timeout=30)
-        if r.status_code == 200:
-            data = r.json()
-            for job in data.get("data", []):
-                created = job.get("created_at", "")
-                if is_within_24_hours(created):
-                    jobs.append({
-                        "title": job.get("title", ""),
-                        "company": job.get("company_name", ""),
-                        "location": job.get("location", "Remote"),
-                        "description": job.get("description", ""),
-                        "url": job.get("url", ""),
-                        "logo": None,
-                        "type": "Full-time",
-                        "source": "Arbeitnow",
-                        "id": job.get("slug")
-                    })
-            log.info(f"Arbeitnow: {len(jobs)} jobs")
-    except Exception as e:
-        log.error(f"Arbeitnow error: {e}")
-    return jobs
 
-def is_within_24_hours(date_str: str) -> bool:
-    """Check if date is within last 24 hours."""
-    if not date_str:
-        return False
-    try:
-        # Try different date formats
-        formats = [
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%d",
-        ]
-        job_date = None
-        for fmt in formats:
-            try:
-                # Remove timezone info if present
-                clean_date = date_str.split(".")[0].split("+")[0].split("Z")[0]
-                job_date = datetime.strptime(clean_date, fmt)
-                break
-            except:
-                continue
-        
-        if job_date:
-            cutoff = datetime.now() - timedelta(days=1)
-            return job_date >= cutoff
-    except:
-        pass
-    return False
-
-def is_duplicate(job: Dict, dedup_store: Dict) -> bool:
-    """Check if job is duplicate."""
-    job_id = str(job.get("id", ""))
-    if job_id and job_id in dedup_store.get("ids", []):
-        return True
-    
-    combo = f"{job.get('title', '').lower().strip()}||{job.get('company', '').lower().strip()}"
-    if combo in dedup_store.get("combos", []):
-        return True
-    
-    return False
-
-def wp_upload_logo(logo_url: str, alt_text: str) -> int:
-    """Upload logo to WordPress."""
+def upload_logo_to_wordpress(logo_url: str, company_name: str) -> str:
+    """Upload company logo to WordPress media library"""
     if not logo_url:
-        return None
+        return ""
+    
     try:
-        r_img = S.get(logo_url, timeout=20)
-        if r_img.status_code != 200:
-            return None
+        # Download logo
+        logo_response = session.get(logo_url, timeout=15)
+        if logo_response.status_code != 200:
+            return ""
         
-        filename = logo_url.split("/")[-1].split("?")[0] or "logo.png"
-        headers = {
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Content-Type": r_img.headers.get("Content-Type", "image/png"),
+        # Upload to WordPress
+        wp_media_url = f"{WP_BASE_URL}/wp-json/wp/v2/media"
+        
+        files = {
+            'file': (f"{company_name.replace(' ', '_')}_logo.jpg", 
+                    logo_response.content, 
+                    'image/jpeg')
         }
         
-        r_up = S.post(
-            WP_MEDIA_ENDPOINT,
-            headers=headers,
-            data=r_img.content,
+        upload_response = session.post(
+            wp_media_url,
+            files=files,
             auth=HTTPBasicAuth(WP_USER, WP_APP_PASSWORD),
             timeout=30
         )
         
-        if r_up.status_code in (200, 201):
-            return r_up.json().get("id")
-    except Exception as e:
-        log.error(f"Logo upload error: {e}")
-    return None
-
-def wp_post_job(job: Dict, dedup_store: Dict):
-    """Post job to WordPress."""
-    if is_duplicate(job, dedup_store):
-        log.info(f"⏭️  Skipping duplicate: {job['title']}")
-        return
-    
-    try:
-        featured_media = None
-        if job.get("logo"):
-            alt = f"{job.get('company', 'Company')} logo"
-            featured_media = wp_upload_logo(job["logo"], alt)
+        if upload_response.status_code == 201:
+            media_data = upload_response.json()
+            return media_data.get('source_url', '')
         
-        wp_data = {
-            "title": job.get("title", "Untitled"),
-            "content": job.get("description", ""),
-            "status": "publish",
-            "meta": {
-                "_company_name": job.get("company", ""),
-                "_job_location": job.get("location", ""),
-                "_application": job.get("url", ""),
-                "_job_source_attribution": f"Source: {job.get('source', 'Unknown')}",
+    except Exception as e:
+        logger.error(f"Error uploading logo for {company_name}: {e}")
+    
+    return ""
+
+
+def post_job_to_wordpress(job: Dict) -> bool:
+    """Post a job to WordPress via REST API"""
+    try:
+        # Build location string
+        location_parts = []
+        if job.get('job_city'):
+            location_parts.append(job['job_city'])
+        if job.get('job_state'):
+            location_parts.append(job['job_state'])
+        if job.get('job_country'):
+            location_parts.append(job['job_country'])
+        location = ', '.join(location_parts) if location_parts else 'Remote'
+        
+        # Upload logo if available
+        logo_url = ""
+        if job.get('employer_logo'):
+            logo_url = upload_logo_to_wordpress(job['employer_logo'], job['employer_name'])
+        
+        # Build job description
+        description = job.get('job_description', '').strip()
+        if not description:
+            description = f"Position available at {job['employer_name']}. Apply via the application link."
+        
+        # Determine job type
+        job_type = job.get('job_employment_type', 'FULLTIME').upper()
+        if job.get('job_is_remote'):
+            job_type_mapped = 'remote'
+        elif 'FULL' in job_type:
+            job_type_mapped = 'full-time'
+        elif 'PART' in job_type:
+            job_type_mapped = 'part-time'
+        elif 'CONTRACT' in job_type:
+            job_type_mapped = 'contract'
+        elif 'INTERN' in job_type:
+            job_type_mapped = 'internship'
+        else:
+            job_type_mapped = 'full-time'
+        
+        # Prepare WordPress post data
+        post_data = {
+            'title': f"{job['job_title']} at {job['employer_name']}",
+            'content': description,
+            'status': 'publish',
+            'meta': {
+                '_company_name': job['employer_name'],
+                '_job_location': location,
+                '_application': job.get('job_apply_link', ''),
+                '_job_type': job_type_mapped,
+                '_company_logo': logo_url,
+                '_source': job.get('source', 'JSearch API'),
+                '_posted_date': job.get('job_posted_at_datetime_utc', '')
             }
         }
         
-        if featured_media:
-            wp_data["featured_media"] = featured_media
-        
-        r = S.post(
-            WP_JOB_ENDPOINT,
-            json=wp_data,
+        # Post to WordPress
+        wp_post_url = f"{WP_BASE_URL}/wp-json/wp/v2/job_listing"
+        response = session.post(
+            wp_post_url,
+            json=post_data,
             auth=HTTPBasicAuth(WP_USER, WP_APP_PASSWORD),
-            timeout=40
+            timeout=30
         )
         
-        if r.status_code in (200, 201):
-            log.info(f"✅ Posted: {job['title']} @ {job['company']}")
-            
-            # Update dedup
-            if job.get("id"):
-                dedup_store["ids"].append(str(job["id"]))
-            combo = f"{job['title'].lower().strip()}||{job['company'].lower().strip()}"
-            if combo not in dedup_store["combos"]:
-                dedup_store["combos"].append(combo)
-            save_dedup(dedup_store)
+        if response.status_code == 201:
+            logger.info(f"✓ Posted: {job['job_title']} at {job['employer_name']}")
+            return True
         else:
-            log.error(f"Failed: {r.status_code} - {r.text[:100]}")
+            logger.error(f"Failed to post job: {response.status_code} - {response.text[:200]}")
+            return False
+            
     except Exception as e:
-        log.error(f"Post error: {e}")
+        logger.error(f"Error posting job to WordPress: {e}")
+        return False
+
 
 def main():
-    """Main function."""
-    log.info("🚀 Starting TechJobs360 FREE Scraper")
-    log.info("📡 Sources: Remotive.io, Arbeitnow (100% FREE)")
-    log.info("📅 Filter: Jobs posted in last 24 hours only")
+    """Main execution function"""
+    logger.info("=" * 60)
+    logger.info("TechJobs360 FREE Job Scraper - JSearch API")
+    logger.info("=" * 60)
     
-    dedup_store = load_dedup()
+    # Validate credentials
+    if not WP_APP_PASSWORD:
+        logger.error("WP_APP_PASSWORD not set")
+        sys.exit(1)
     
-    all_jobs = []
-    all_jobs.extend(fetch_from_remotive())
-    all_jobs.extend(fetch_from_arbeitnow())
+    if not RAPIDAPI_KEY:
+        logger.error("RAPIDAPI_KEY not set")
+        sys.exit(1)
     
-    log.info(f"Total fetched: {len(all_jobs)} jobs")
+    # Load posted jobs
+    posted_jobs = load_posted_jobs()
+    logger.info(f"Loaded {len(posted_jobs)} previously posted jobs")
+    
+    # Fetch jobs from JSearch API
+    logger.info("\n" + "=" * 60)
+    logger.info("Fetching jobs from JSearch API...")
+    logger.info("=" * 60)
+    
+    all_jobs = fetch_jsearch_jobs()
+    logger.info(f"\nTotal jobs fetched: {len(all_jobs)}")
+    
+    # Deduplicate and post
+    new_posted = 0
+    skipped = 0
     
     for job in all_jobs:
-        wp_post_job(job, dedup_store)
-        time.sleep(2)  # Rate limiting
+        job_id = generate_job_id(job)
+        
+        if job_id in posted_jobs:
+            skipped += 1
+            continue
+        
+        # Post to WordPress
+        if post_job_to_wordpress(job):
+            posted_jobs.add(job_id)
+            new_posted += 1
+            time.sleep(2)  # Rate limit for WordPress API
     
-    log.info("✅ Scraping cycle complete!")
+    # Save updated posted jobs
+    save_posted_jobs(posted_jobs)
+    
+    # Summary
+    logger.info("\n" + "=" * 60)
+    logger.info("SCRAPING COMPLETE")
+    logger.info("=" * 60)
+    logger.info(f"Total jobs fetched: {len(all_jobs)}")
+    logger.info(f"New jobs posted: {new_posted}")
+    logger.info(f"Duplicates skipped: {skipped}")
+    logger.info("=" * 60)
+
 
 if __name__ == "__main__":
     main()
