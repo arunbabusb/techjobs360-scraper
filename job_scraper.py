@@ -27,7 +27,7 @@ WP_BASE_URL = "https://techjobs360.com"
 WP_USER = "admintech"
 WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD", "")
 DEDUP_FILE = "posted_jobs.json"
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")  # JSearch API key
+JSEARCH_API_KEY = os.getenv("JSEARCH_API_KEY", "")  # JSearch API key
 
 # Setup logging
 logging.basicConfig(
@@ -77,8 +77,8 @@ def fetch_jsearch_jobs() -> List[Dict]:
     Fetch jobs from JSearch API (FREE tier)
     Covers: LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google for Jobs
     """
-    if not RAPIDAPI_KEY:
-        logger.error("RAPIDAPI_KEY not set in environment")
+    if not JSEARCH_API_KEY:
+        logger.error("JSEARCH_API_KEY not set in environment")
         return []
     
     jobs = []
@@ -94,7 +94,7 @@ def fetch_jsearch_jobs() -> List[Dict]:
     
     url = "https://jsearch.p.rapidapi.com/search"
     headers = {
-        "X-RapidAPI-Key": RAPIDAPI_KEY,
+        "X-RapidAPI-Key": JSEARCH_API_KEY,
         "X-RapidAPI-Host": "jsearch.p.rapidapi.com"
     }
     
@@ -274,8 +274,8 @@ def main():
         logger.error("WP_APP_PASSWORD not set")
         sys.exit(1)
     
-    if not RAPIDAPI_KEY:
-        logger.error("RAPIDAPI_KEY not set")
+    if not JSEARCH_API_KEY:
+        logger.error("JSEARCH_API_KEY not set")
         sys.exit(1)
     
     # Load posted jobs
