@@ -34,7 +34,7 @@ JSEARCH_API_KEY = "11d1b727f2msh1be47752caa8059p147b94jsnd9d66d2e5ecd"
 JSEARCH_HOST = "jsearch.p.rapidapi.com"
 JSEARCH_QUERY = "software engineer"
 JSEARCH_COUNTRY = "in"
-JSEARCH_NUM_PAGES = 2  # Reduced for FREE plan (200 req/month)
+JSEARCH_NUM_PAGES = 1  # Reduced for FREE plan (200 req/month)
 JSEARCH_DATE_POSTED = "week"
 
 # FREE PLAN OPTIMIZATION - Disable extra API calls to save quota
@@ -458,12 +458,12 @@ def main_loop():
     if ENABLE_ENHANCED_API:
         log.info("📊 API Mode: FULL (Job Search + Details + Salary + Company Salary)")
     else:
-        log.info("💰 API Mode: FREE PLAN (Job Search only - 2 pages, 200 req/month)")
+        log.info("💰 API Mode: FREE PLAN (Job Search only - 1 page, 200 req/month)")
         log.info("💡 Tip: Set ENABLE_ENHANCED_API=True for paid plans (Pro/Ultra/Mega)")
     
     dedup_store = load_dedup()
     
-    while True:
+    # while True:  # DISABLED: Run once per GitHub Actions schedule
         try:
             log.info("="*60)
             log.info("Starting new scraping cycle...")
@@ -486,14 +486,13 @@ def main_loop():
                 wp_post_job(job, dedup_store)
                 
                 # Rate limiting between jobs
-                time.sleep(1)
-            
+            time.sleep(3)  # Increased delay to avoid rate limits            
             # Cleanup expired jobs
             remove_expired_jobs_from_wp()
             
             log.info("="*60)
             log.info(f"✅ Cycle complete! Sleeping {LOOP_INTERVAL_SEC}s until next scrape...")
-            time.sleep(LOOP_INTERVAL_SEC)
+            # time.sleep(LOOP_INTERVAL_SEC)  # DISABLED: GitHub Actions handles scheduling
             
         except KeyboardInterrupt:
             log.info("\n🛑 Scraper stopped by user")
