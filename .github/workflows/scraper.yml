@@ -33,7 +33,7 @@ jobs:
         run: python job_scraper.py
         env:
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-        JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}
+                JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}
       
       - name: Commit and push dedup file
         run: |
