@@ -1,52 +1,48 @@
-name: Scrape Jobs
+name: TechJobs360 FREE Scraper
 
-# 1. ADDED THIS: Gives the action permission to save files.
+# Permission to save dedup file
 permissions:
   contents: write
 
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch: # Lets you run it manually from the "Actions" tab
+  workflow_dispatch: # Manual run from Actions tab
   schedule:
-    '0 6,18 * * *' # Runs at 6 AM and 6 PM IST daily (FREE plan optimized)
+    # Runs twice daily at 6 AM and 6 PM IST (FREE API friendly)
+    # This schedule ensures fresh jobs daily without overwhelming free APIs
+    - cron: '0 6,18 * * *'
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-
+    
     steps:
-      # This step checks out your repository's code
       - name: Checkout repository
         uses: actions/checkout@v3
-
-      # This step sets up the Python version
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-
-      # This step installs your "requirements.txt" libraries
+      
       - name: Install dependencies
         run: pip install -r requirements.txt
-
-      # This step runs your scraper
-      - name: Run Python scraper
+      
+      - name: Run FREE job scraper
         run: python job_scraper.py
         env:
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-
-      # 2. FIXED THIS STEP: This saves your posted_jobs.json file
-      - name: Commit and push new jobs
+      
+      - name: Commit and push dedup file
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           git add posted_jobs.json
           
-          # Check if there are changes to commit
           if git diff --staged --quiet; then
             echo "No new jobs to commit."
           else
-            git commit -m "📊 Update job list"
+            git commit -m "📊 Update job dedup list"
             git push
           fi
