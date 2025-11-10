@@ -16,10 +16,13 @@ import sys
 import json
 import time
 import logging
+import mimetypes
+import re
 from typing import Dict, List
 from datetime import datetime, timedelta
 import requests
-from requests.adapters import HTTPAdapter, Retry
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from requests.auth import HTTPBasicAuth
 
 # CONFIG
@@ -28,6 +31,7 @@ WP_USER = "admintech"
 WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD", "")
 DEDUP_FILE = "posted_jobs.json"
 JSEARCH_API_KEY = os.getenv("JSEARCH_API_KEY", "")  # JSearch API key
+DRY_RUN = os.getenv('DRY_RUN', '0') == '1'  # If set to '1', don't post to WordPress (safe testing)
 
 # Setup logging
 logging.basicConfig(
@@ -41,7 +45,6 @@ session = requests.Session()
 retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
 session.mount('https://', HTTPAdapter(max_retries=retries))
 session.mount('http://', HTTPAdapter(max_retries=retries))
-
 
 def load_posted_jobs() -> set:
     """Load previously posted job IDs"""
@@ -69,7 +72,10 @@ def generate_job_id(job: Dict) -> str:
     title = job.get('job_title', '').lower().strip()
     company = job.get('employer_name', '').lower().strip()
     location = job.get('job_city', '').lower().strip()
-    return f"{title}_{company}_{location}".replace(' ', '_')
+    raw = f"{title}_{company}_{location}"
+    # keep letters, digits, underscore and dash only
+    sanitized = re.sub(r'[^a-z0-9_-]+', '_', raw)
+    return sanitized.strip('_')
 
 
 def fetch_jsearch_jobs() -> List[Dict]:
@@ -111,7 +117,11 @@ def fetch_jsearch_jobs() -> List[Dict]:
             response = session.get(url, headers=headers, params=params, timeout=30)
             
             if response.status_code == 200:
-                data = response.json()
+                try:
+                    data = response.json()
+                except Exception:
+                    logger.error(f"Failed to parse JSON from JSearch response for '{query}'")
+                    continue
                 job_results = data.get('data', [])
                 
                 logger.info(f"Found {len(job_results)} jobs for '{query}'")
@@ -139,10 +149,10 @@ def fetch_jsearch_jobs() -> List[Dict]:
                 time.sleep(1)
                 
             elif response.status_code == 429:
-                logger.warning(f"Rate limit hit for '{query}' - skipping")
+                logger.warning(f"Rate limit hit for '{query}' - sleeping and skipping")
                 time.sleep(5)
             else:
-                logger.error(f"JSearch API error for '{query}': {response.status_code}")
+                logger.error(f"JSearch API error for '{query}': {response.status_code} - {response.text[:200]}")
                 
         except Exception as e:
             logger.error(f"Error fetching JSearch jobs for '{query}': {e}")
@@ -156,21 +166,37 @@ def upload_logo_to_wordpress(logo_url: str, company_name: str) -> str:
     if not logo_url:
         return ""
     
+    if DRY_RUN:
+        logger.info(f"DRY_RUN: would download and upload logo for {company_name} from {logo_url}")
+        return ""
+    
     try:
         # Download logo
         logo_response = session.get(logo_url, timeout=15)
         if logo_response.status_code != 200:
+            logger.warning(f"Failed to download logo from {logo_url}: {logo_response.status_code}")
             return ""
+        
+        # Determine content type and extension
+        content_type = ''
+        try:
+            content_type = (logo_response.headers.get('Content-Type') or '').split(';')[0].lower()
+        except Exception:
+            content_type = ''
+        if not content_type:
+            content_type = mimetypes.guess_type(logo_url)[0] or 'image/jpeg'
+        ext = mimetypes.guess_extension(content_type) or '.jpg'
+
+        # sanitize filename
+        safe_name = re.sub(r'[^A-Za-z0-9._-]+', '_', company_name).strip('_') or 'logo'
+        filename = f"{safe_name}_logo{ext}"
+
+        files = {
+            'file': (filename, logo_response.content, content_type)
+        }
         
         # Upload to WordPress
         wp_media_url = f"{WP_BASE_URL}/wp-json/wp/v2/media"
-        
-        files = {
-            'file': (f"{company_name.replace(' ', '_')}_logo.jpg", 
-                    logo_response.content, 
-                    'image/jpeg')
-        }
-        
         upload_response = session.post(
             wp_media_url,
             files=files,
@@ -178,10 +204,16 @@ def upload_logo_to_wordpress(logo_url: str, company_name: str) -> str:
             timeout=30
         )
         
-        if upload_response.status_code == 201:
-            media_data = upload_response.json()
-            return media_data.get('source_url', '')
-        
+        if upload_response.status_code in (200, 201):
+            try:
+                media_data = upload_response.json()
+                return media_data.get('source_url', '')
+            except Exception:
+                logger.error("Uploaded logo but failed to parse JSON response from WordPress")
+                return ""
+        else:
+            logger.error(f"Failed to upload media to WordPress: {upload_response.status_code} - {upload_response.text[:200]}")
+    
     except Exception as e:
         logger.error(f"Error uploading logo for {company_name}: {e}")
     
@@ -201,9 +233,9 @@ def post_job_to_wordpress(job: Dict) -> bool:
             location_parts.append(job['job_country'])
         location = ', '.join(location_parts) if location_parts else 'Remote'
         
-        # Upload logo if available
+        # Upload logo if available (skip in DRY_RUN)
         logo_url = ""
-        if job.get('employer_logo'):
+        if job.get('employer_logo') and not DRY_RUN:
             logo_url = upload_logo_to_wordpress(job['employer_logo'], job['employer_name'])
         
         # Build job description
@@ -241,6 +273,10 @@ def post_job_to_wordpress(job: Dict) -> bool:
                 '_posted_date': job.get('job_posted_at_datetime_utc', '')
             }
         }
+
+        if DRY_RUN:
+            logger.info(f"DRY_RUN - would post: {post_data['title']} (meta: {_short_meta := str(post_data['meta'])[:200]})")
+            return True
         
         # Post to WordPress
         wp_post_url = f"{WP_BASE_URL}/wp-json/wp/v2/job_listing"
@@ -251,11 +287,13 @@ def post_job_to_wordpress(job: Dict) -> bool:
             timeout=30
         )
         
-        if response.status_code == 201:
+        if response.status_code in (200, 201):
             logger.info(f"✓ Posted: {job['job_title']} at {job['employer_name']}")
             return True
         else:
-            logger.error(f"Failed to post job: {response.status_code} - {response.text[:200]}")
+            # try to capture useful error info
+            text = response.text or ''
+            logger.error(f"Failed to post job: {response.status_code} - {text[:1000]}")
             return False
             
     except Exception as e:
@@ -269,8 +307,8 @@ def main():
     logger.info("TechJobs360 FREE Job Scraper - JSearch API")
     logger.info("=" * 60)
     
-    # Validate credentials
-    if not WP_APP_PASSWORD:
+    # Validate credentials (allow DRY_RUN without WP password)
+    if not WP_APP_PASSWORD and not DRY_RUN:
         logger.error("WP_APP_PASSWORD not set")
         sys.exit(1)
     
