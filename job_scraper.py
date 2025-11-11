@@ -220,6 +220,83 @@ def upload_logo_to_wordpress(logo_url: str, company_name: str) -> str:
     return ""
 
 
+
+def delete_old_jobs(days_old: int = 3) -> int:
+    """Delete jobs older than specified days from WordPress"""
+    if DRY_RUN:
+        logger.info(f"DRY_RUN: would delete jobs older than {days_old} days")
+        return 0
+    
+    try:
+        deleted_count = 0
+        page = 1
+        
+        # Calculate cutoff date
+        cutoff_date = datetime.now() - timedelta(days=days_old)
+        logger.info(f"Deleting jobs posted before: {cutoff_date.strftime('%Y-%m-%d')}")
+        
+        while True:
+            # Get all published jobs
+            wp_jobs_url = f"{WP_BASE_URL}/wp-json/wp/v2/job_listing"
+            params = {
+                'per_page': 100,
+                'page': page,
+                'status': 'publish'
+            }
+            
+            response = session.get(
+                wp_jobs_url,
+                params=params,
+                auth=HTTPBasicAuth(WP_USER, WP_APP_PASSWORD),
+                timeout=30
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Failed to fetch jobs: {response.status_code}")
+                break
+            
+            jobs = response.json()
+            if not jobs:
+                break
+            
+            for job in jobs:
+                job_date_str = job.get('date', '')
+                if not job_date_str:
+                    continue
+                
+                try:
+                    # Parse WordPress date format
+                    job_date = datetime.strptime(job_date_str, '%Y-%m-%dT%H:%M:%S')
+                    
+                    if job_date < cutoff_date:
+                        # Delete this job
+                        job_id = job['id']
+                        delete_url = f"{WP_BASE_URL}/wp-json/wp/v2/job_listing/{job_id}"
+                        delete_response = session.delete(
+                            delete_url,
+                            auth=HTTPBasicAuth(WP_USER, WP_APP_PASSWORD),
+                            timeout=30
+                        )
+                        
+                        if delete_response.status_code in (200, 204):
+                            deleted_count += 1
+                            logger.info(f"Deleted old job: {job.get('title', {}).get('rendered', 'Unknown')} (ID: {job_id})")
+                        else:
+                            logger.error(f"Failed to delete job {job_id}: {delete_response.status_code}")
+                
+                except Exception as e:
+                    logger.error(f"Error processing job date: {e}")
+            
+            page += 1
+        
+        logger.info(f"Total old jobs deleted: {deleted_count}")
+        return deleted_count
+    
+    except Exception as e:
+        logger.error(f"Error deleting old jobs: {e}")
+        return 0
+
+
 def post_job_to_wordpress(job: Dict) -> bool:
     """Post a job to WordPress via REST API"""
     try:
@@ -319,6 +396,13 @@ def main():
     # Load posted jobs
     posted_jobs = load_posted_jobs()
     logger.info(f"Loaded {len(posted_jobs)} previously posted jobs")
+
+      # Delete old jobs (older than 3 days)
+    logger.info("\n" + "=" * 60)
+    logger.info("Deleting old jobs...")
+    logger.info("=" * 60)
+    deleted_count = delete_old_jobs(days_old=3)
+
     
     # Fetch jobs from JSearch API
     logger.info("\n" + "=" * 60)
