@@ -474,18 +474,16 @@ def post_job_to_wordpress(job: Dict) -> bool:
         'middle-east-africa': None,
         'latin-america': None,
         'remote-global': None
-    }
-    
+
     # Fetch region term ID from WordPress REST API
     region_term_id = None
-    try:
-        region_url = f"{WP_BASE_URL}/wp-json/wp/v2/job_listing_region?slug={region_slug}"
-        region_response = session.get(region_url, timeout=10)
-        if region_response.status_code == 200 and region_response.json():
-            region_term_id = region_response.json()[0]['id']
-            logger.info(f"Found region '{region_slug}' with ID: {region_term_id}")
-    except Exception as e:
-        logger.warning(f"Could not fetch region term ID for '{region_slug}': {e}")
+    region_url = f"{WP_BASE_URL}/wp-json/wp/v2/job_listing_region?slug={region_slug}"
+    region_response = session.get(region_url, timeout=10)
+    if region_response.status_code == 200 and region_response.json():
+        region_term_id = region_response.json()[0]['id']
+        logger.info(f"Found region '{region_slug}' with ID: {region_term_id}")
+    }
+    
 
         # Prepare WordPress post data
         post_data = {
