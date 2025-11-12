@@ -465,23 +465,12 @@ def post_job_to_wordpress(job: Dict) -> bool:
 
     # Detect continent region from location
     region_slug = detect_continent_region(location)
-    
-    # Get region term ID from WordPress (we'll create a mapping dict for efficiency)
-    region_term_map = {
-        'europe': None,
-        'north-america': None,
-        'asia-pacific': None,
-        'middle-east-africa': None,
-        'latin-america': None,
-        'remote-global': None
-
     # Fetch region term ID from WordPress REST API
     region_term_id = None
     region_url = f"{WP_BASE_URL}/wp-json/wp/v2/job_listing_region?slug={region_slug}"
     region_response = session.get(region_url, timeout=10)
+              region_term_id = region_response.json()[0]['id']
     if region_response.status_code == 200 and region_response.json():
-        region_term_id = region_response.json()[0]['id']
-        logger.info(f"Found region '{region_slug}' with ID: {region_term_id}")
     }
     
 
