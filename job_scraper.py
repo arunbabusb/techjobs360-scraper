@@ -470,8 +470,7 @@ def main():
     logger.info("\n" + "=" * 60)
     logger.info("Deleting old jobs...")
     logger.info("=" * 60)
-    deleted_count = delete_old_jobs(days=1443)
-
+    deleted_count = delete_old_jobs(days_old=14)
     
         # Fetch jobs from MULTIPLE FREE APIs
     logger.info("\n" + "=" * 60)
