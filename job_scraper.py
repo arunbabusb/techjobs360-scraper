@@ -460,8 +460,7 @@ if not WP_APP_PASSWORD and not DRY_RUN:
     
     if not JSEARCH_API_KEY:
         logger.error("JSEARCH_API_KEY not set")
-        sys.exit(1)
-    
+        sys.exit(1)    
     # Load posted jobs
     posted_jobs = load_posted_jobs()
     logger.info(f"Loaded {len(posted_jobs)} previously posted jobs")
