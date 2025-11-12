@@ -221,7 +221,7 @@ def upload_logo_to_wordpress(logo_url: str, company_name: str) -> str:
 
 
 
-def delete_old_jobs(days_old: int = 3) -> int:
+def delete_old_jobs(days_old: int =143) -> int:
     """Delete jobs older than specified days from WordPress"""
     if DRY_RUN:
         logger.info(f"DRY_RUN: would delete jobs older than {days_old} days")
@@ -397,11 +397,11 @@ def main():
     posted_jobs = load_posted_jobs()
     logger.info(f"Loaded {len(posted_jobs)} previously posted jobs")
 
-      # Delete old jobs (older than 3 days)
+      # Delete old jobs (older than 2 weeks))
     logger.info("\n" + "=" * 60)
     logger.info("Deleting old jobs...")
     logger.info("=" * 60)
-    deleted_count = delete_old_jobs(days_old=3)
+    deleted_count = delete_old_jobs(days=1443)
 
     
     # Fetch jobs from JSearch API
