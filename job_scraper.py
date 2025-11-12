@@ -221,7 +221,7 @@ def upload_logo_to_wordpress(logo_url: str, company_name: str) -> str:
 
 
 
-def delete_old_jobs(days_old: int =143) -> int:
+def delete_old_jobs(days_old: int = 14) -> int:
     """Delete jobs older than specified days from WordPress"""
     if DRY_RUN:
         logger.info(f"DRY_RUN: would delete jobs older than {days_old} days")
