@@ -473,7 +473,8 @@ def main():
     deleted_count = delete_old_jobs(days=1443)
 
     
-    # Fetch jobs from MULTIPLE FREE APIs    logger.info("\n" + "=" * 60)
+        # Fetch jobs from MULTIPLE FREE APIs
+    logger.info("\n" + "=" * 60)
         logger.info("\n" + "=" * 60)
     logger.info("Fetching jobs from JSearch API...")
     logger.info("=" * 60)
