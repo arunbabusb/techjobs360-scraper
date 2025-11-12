@@ -475,9 +475,9 @@ def main():
     
         # Fetch jobs from MULTIPLE FREE APIs
     logger.info("\n" + "=" * 60)
-          logger.info("Fetching jobs from JSearch API...")
+    logger.info("Fetching jobs from JSearch API...")
     logger.info("=" * 60)
-    jsearch_jobs = fetch_jsearch_jobs()
+  search_jobs = fetch_jsearch_jobs()
     logger.info(f"JSearch API returned: {len(jsearch_jobs)} jobs")
     
     logger.info("\n" + "=" * 60)
