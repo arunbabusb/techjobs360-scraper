@@ -477,9 +477,8 @@ def main():
     logger.info("\n" + "=" * 60)
     logger.info("Fetching jobs from JSearch API...")
     logger.info("=" * 60)
-  search_jobs = fetch_jsearch_jobs()
-    logger.info(f"JSearch API returned: {len(jsearch_jobs)} jobs")
-    
+    jsearch_jobs = fetch_jsearch_jobs()
+    logger.info(f"JSearch API returned: {len(jsearch_jobs)} jobs")    
     logger.info("\n" + "=" * 60)
     logger.info("Fetching jobs from Arbeitnow API (No API Key!)...")
     logger.info("=" * 60)
