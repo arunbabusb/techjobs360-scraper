@@ -454,10 +454,10 @@ def main():
     logger.info("=" * 60)
 logger.info("TechJobs360 FREE Job Scraper - MULTIPLE FREE APIs")    
     # Validate credentials (allow DRY_RUN without WP password)
-if not WP_APP_PASSWORD and not DRY_RUN:
+    if not WP_APP_PASSWORD and not DRY_RUN:
         logger.error("WP_APP_PASSWORD not set")
         sys.exit(1)
-    
+
     if not JSEARCH_API_KEY:
         logger.error("JSEARCH_API_KEY not set")
         sys.exit(1)    
