@@ -7,6 +7,8 @@ TechJobs360 FREE Job Scraper -> WordPress
 Sources:
 - JSearch API (FREE tier from RapidAPI)
   Fetches from: LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google for Jobs
+  - Arbeitnow API (FREE - No API Key Required!)
+   Covers: Jobs in Europe and Remote positions
 
 Filters: Last 24 hours only
 """
@@ -159,6 +161,75 @@ def fetch_jsearch_jobs() -> List[Dict]:
             continue
     
     return jobs
+
+
+
+def fetch_arbeitnow_jobs() -> List[Dict]:
+    """
+    Fetch jobs from Arbeitnow API (FREE - No API Key Required!)
+    Covers: Jobs in Europe and Remote positions
+    """
+    logger.info("Fetching Arbeitnow jobs (no API key needed)")
+    
+    jobs = []
+    
+    # Job categories to search
+    search_tags = [
+        "software%20engineer",
+        "data%20scientist",
+        "product%20manager",
+        "full%20stack%20developer",
+        "devops%20engineer"
+    ]
+    
+    for tag in search_tags:
+        try:
+            url = f"https://www.arbeitnow.com/api/job-board-api?search={tag}&page=1"
+            logger.info(f"Fetching Arbeitnow jobs for: {tag.replace('%20', ' ')}")
+            
+            response = session.get(url, timeout=30)
+            
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                except Exception:
+                    logger.error(f"Failed to parse JSON from Arbeitnow response for '{tag}'")
+                    continue
+                
+                job_results = data.get('data', [])
+                logger.info(f"Found {len(job_results)} jobs for '{tag.replace('%20', ' ')}'")
+                
+                for job in job_results:
+                    # Extract and normalize job data
+                    normalized_job = {
+                        'job_title': job.get('title', 'Not specified'),
+                        'employer_name': job.get('company_name', 'Not specified'),
+                        'employer_logo': job.get('company_logo', ''),
+                        'job_city': job.get('location', ''),
+                        'job_state': '',
+                        'job_country': '',
+                        'job_description': job.get('description', ''),
+                        'job_apply_link': job.get('url', ''),
+                        'job_posted_at_datetime_utc': job.get('created_at', ''),
+                        'source': 'Arbeitnow API',
+                        'job_employment_type': job.get('job_types', ['FULLTIME'])[0] if job.get('job_types') else 'FULLTIME',
+                        'job_is_remote': job.get('remote', False),
+                    }
+                    
+                    jobs.append(normalized_job)
+                
+                # Respect rate limits
+                time.sleep(1)
+                
+            else:
+                logger.warning(f"Arbeitnow API error for '{tag}': {response.status_code}")
+                
+        except Exception as e:
+            logger.error(f"Error fetching Arbeitnow jobs for '{tag}': {e}")
+            continue
+    
+    return jobs
+
 
 
 def upload_logo_to_wordpress(logo_url: str, company_name: str) -> str:
@@ -381,9 +452,7 @@ def post_job_to_wordpress(job: Dict) -> bool:
 def main():
     """Main execution function"""
     logger.info("=" * 60)
-    logger.info("TechJobs360 FREE Job Scraper - JSearch API")
-    logger.info("=" * 60)
-    
+logger.info("TechJobs360 FREE Job Scraper - MULTIPLE FREE APIs")    
     # Validate credentials (allow DRY_RUN without WP password)
     if not WP_APP_PASSWORD and not DRY_RUN:
         logger.error("WP_APP_PASSWORD not set")
@@ -404,12 +473,21 @@ def main():
     deleted_count = delete_old_jobs(days=1443)
 
     
-    # Fetch jobs from JSearch API
-    logger.info("\n" + "=" * 60)
+    # Fetch jobs from MULTIPLE FREE APIs    logger.info("\n" + "=" * 60)
+        logger.info("\n" + "=" * 60)
     logger.info("Fetching jobs from JSearch API...")
     logger.info("=" * 60)
+    jsearch_jobs = fetch_jsearch_jobs()
+    logger.info(f"JSearch API returned: {len(jsearch_jobs)} jobs")
     
-    all_jobs = fetch_jsearch_jobs()
+    logger.info("\n" + "=" * 60)
+    logger.info("Fetching jobs from Arbeitnow API (No API Key!)...")
+    logger.info("=" * 60)
+    arbeitnow_jobs = fetch_arbeitnow_jobs()
+    logger.info(f"Arbeitnow API returned: {len(arbeitnow_jobs)} jobs")
+    
+    # Combine all jobs from different sources
+    all_jobs = jsearch_jobs + arbeitnow_jobs
     logger.info(f"\nTotal jobs fetched: {len(all_jobs)}")
     
     # Deduplicate and post
