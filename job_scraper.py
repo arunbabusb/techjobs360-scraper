@@ -69,6 +69,62 @@ def save_posted_jobs(posted_ids: set):
         logger.error(f"Error saving posted jobs: {e}")
 
 
+def detect_continent_region(location: str) -> str:
+    """Detect continent region from job location"""
+    if not location:
+        return 'remote-global'
+    
+    location_lower = location.lower()
+    
+    # Country to continent mapping
+    europe_keywords = ['germany', 'deutschland', 'berlin', 'munich', 'hamburg', 'frankfurt', 
+                       'uk', 'united kingdom', 'london', 'france', 'paris', 'netherlands', 
+                       'amsterdam', 'switzerland', 'zurich', 'spain', 'italy', 'sweden', 
+                       'norway', 'denmark', 'poland', 'austria', 'belgium', 'ireland']
+    
+    north_america_keywords = ['usa', 'united states', 'america', 'canada', 'mexico', 
+                              'san francisco', 'new york', 'los angeles', 'chicago', 
+                              'toronto', 'vancouver', 'seattle', 'austin', 'boston']
+    
+    asia_pacific_keywords = ['india', 'singapore', 'australia', 'japan', 'china', 'korea', 
+                            'tokyo', 'sydney', 'melbourne', 'bangalore', 'mumbai', 
+                            'new zealand', 'indonesia', 'thailand', 'vietnam', 'philippines']
+    
+    middle_east_africa_keywords = ['uae', 'dubai', 'saudi arabia', 'israel', 'egypt', 
+                                   'south africa', 'kenya', 'nigeria', 'qatar', 'bahrain']
+    
+    latin_america_keywords = ['brazil', 'mexico', 'argentina', 'chile', 'colombia', 
+                             'peru', 'buenos aires', 'sao paulo', 'rio de janeiro']
+    
+    # Check for remote jobs
+    if 'remote' in location_lower or 'anywhere' in location_lower or 'worldwide' in location_lower:
+        return 'remote-global'
+    
+    # Check each region
+    for keyword in europe_keywords:
+        if keyword in location_lower:
+            return 'europe'
+    
+    for keyword in north_america_keywords:
+        if keyword in location_lower:
+            return 'north-america'
+    
+    for keyword in asia_pacific_keywords:
+        if keyword in location_lower:
+            return 'asia-pacific'
+    
+    for keyword in middle_east_africa_keywords:
+        if keyword in location_lower:
+            return 'middle-east-africa'
+    
+    for keyword in latin_america_keywords:
+        if keyword in location_lower:
+            return 'latin-america'
+    
+    # Default to Europe since most current jobs are from Germany
+    return 'europe'
+
+
 def generate_job_id(job: Dict) -> str:
     """Generate unique ID for job based on title + company + location"""
     title = job.get('job_title', '').lower().strip()
@@ -406,6 +462,31 @@ def post_job_to_wordpress(job: Dict) -> bool:
         else:
             job_type_mapped = 'full-time'
         
+
+    # Detect continent region from location
+    region_slug = detect_continent_region(location)
+    
+    # Get region term ID from WordPress (we'll create a mapping dict for efficiency)
+    region_term_map = {
+        'europe': None,
+        'north-america': None,
+        'asia-pacific': None,
+        'middle-east-africa': None,
+        'latin-america': None,
+        'remote-global': None
+    }
+    
+    # Fetch region term ID from WordPress REST API
+    region_term_id = None
+    try:
+        region_url = f"{WP_BASE_URL}/wp-json/wp/v2/job_listing_region?slug={region_slug}"
+        region_response = session.get(region_url, timeout=10)
+        if region_response.status_code == 200 and region_response.json():
+            region_term_id = region_response.json()[0]['id']
+            logger.info(f"Found region '{region_slug}' with ID: {region_term_id}")
+    except Exception as e:
+        logger.warning(f"Could not fetch region term ID for '{region_slug}': {e}")
+
         # Prepare WordPress post data
         post_data = {
             'title': f"{job['job_title']} at {job['employer_name']}",
@@ -418,7 +499,8 @@ def post_job_to_wordpress(job: Dict) -> bool:
                 '_job_type': job_type_mapped,
                 '_company_logo': logo_url,
                 '_source': job.get('source', 'JSearch API'),
-                '_posted_date': job.get('job_posted_at_datetime_utc', '')
+            ,
+        'job_listing_region': [region_term_id] if region_term_id else []    '_posted_date': job.get('job_posted_at_datetime_utc', '')
             }
         }
 
