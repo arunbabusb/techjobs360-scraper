@@ -16,6 +16,11 @@ sources:
     type: jsearch
     enabled: true
 
+      # Arbeitnow Free Job Board - No API key required!
+  - name: arbeitnow
+    type: arbeitnow
+    enabled: true
+
   # Example placeholder for HTML scrapers
   - name: generic_html
     type: html
