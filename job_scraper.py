@@ -469,9 +469,9 @@ def post_job_to_wordpress(job: Dict) -> bool:
     region_term_id = None
     region_url = f"{WP_BASE_URL}/wp-json/wp/v2/job_listing_region?slug={region_slug}"
     region_response = session.get(region_url, timeout=10)
-              region_term_id = region_response.json()[0]['id']
     if region_response.status_code == 200 and region_response.json():
-    }
+                  region_term_id = region_response.json()[0]['id']
+
     
 
         # Prepare WordPress post data
