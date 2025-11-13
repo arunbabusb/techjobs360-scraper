@@ -1,49 +1,53 @@
 name: TechJobs360 FREE Scraper
 
-# Permission to save dedup file
 permissions:
-  contents: write
+  contents: write  # allow committing posted_jobs.json
+  id-token: write
 
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch: # Manual run from Actions tab
+  workflow_dispatch:
+  # Runs once daily at 6:00 AM IST (UTC+5:30). 00:30 UTC == 06:00 IST
   schedule:
-    # Runs once daily at 6 AM IST (FREE API friendly)
-    # This schedule ensures fresh jobs daily without overwhelming free APIs
     - cron: '30 0 * * *'
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-      
-    - name: Install dependencies
-      run: pip install -r requirements.txt
-      
-    - name: Run FREE job scraper
-      run: python job_scraper.py
-      env:
-        WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-        JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}
-      
-    - name: Commit and push dedup file
-      run: |
-        git config --global user.name "GitHub Actions Bot"
-        git config --global user.email "actions@github.com"
-        git add posted_jobs.json
-        
-        if git diff --staged --quiet; then
-          echo "No new jobs to commit."
-        else
-          git commit -m "📊 Update job dedup list"
-          git push
-        fi
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run FREE job scraper
+        env:
+          WP_URL: ${{ secrets.WP_URL }}                 # e.g. https://yourwp.example.com
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}       # WordPress user (for app password)
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}# WP Application Password
+          JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}# Optional: JSearch / other API
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python job_scraper.py
+
+      - name: Commit and push dedup file (if changed)
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          git add posted_jobs.json || true
+
+          if git diff --cached --quiet; then
+            echo "No new jobs to commit."
+          else
+            git commit -m "📊 Update job dedup list"
+            git push origin HEAD:main
+          fi
