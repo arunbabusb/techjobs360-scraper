@@ -8,8 +8,7 @@ on:
     branches: ["main"]
   workflow_dispatch:
   schedule:
-    # Runs once daily at 06:00 IST (00:30 UTC)
-    - cron: '30 0 * * *'
+    - cron: '30 0 * * *'  # 06:00 IST daily (00:30 UTC)
 
 jobs:
   scrape:
@@ -39,7 +38,7 @@ jobs:
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
           JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}
           PROCESS_CONTINENT: ${{ secrets.PROCESS_CONTINENT }}
-          AUTO_ROTATE: ${{ secrets.AUTO_ROTATE }}
+          AUTO_ROTATE: "true"
         run: python job_scraper.py
 
       - name: Commit and push dedup file if changed
@@ -48,30 +47,22 @@ jobs:
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
 
-          # Stage dedup file (if present)
           git add posted_jobs.json || true
 
-          # If nothing staged, exit early
           if git diff --cached --quiet; then
             echo "No new jobs to commit."
             exit 0
           fi
 
-          # Create commit
           git commit -m "📊 Update job dedup list"
 
-          # Make sure we have the latest remote and rebase our commit on top of it.
+          # fetch & rebase to avoid non-fast-forward pushes
           git fetch origin main
-
-          # If origin/main exists, rebase; if rebase fails, fallback to merge
           if git rev-parse --verify origin/main >/dev/null 2>&1; then
-            echo "Rebasing onto origin/main..."
             if ! git pull --rebase origin main; then
-              echo "Rebase failed — aborting rebase and falling back to merge (git pull origin main)"
               git rebase --abort || true
               git pull origin main
             fi
           fi
 
-          # Push our commit
           git push origin HEAD:main
