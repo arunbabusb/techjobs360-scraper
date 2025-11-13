@@ -1,82 +1,194 @@
-# config.yaml - TechJobs360 global scraping configuration - REDUCED FOR FREE API PLAN
-# Organized by continent -> countries -> locales (cities / search queries)
-#
-# Edit queries and city lists as you need. Keep file in repo root
-# alongside job_scraper.py
+# ================================
+#   TechJobs360 Global Scraper
+#       COMPLETE CONFIG
+# ================================
 
 global:
-  default_per_page: 20
-  allow_remote: true
-  languages:
-    - en
-  timezone_note: "Query times are in local zones. Configure sources respecting local rate limits."
+  default_per_page: 20     # used for JSearch
+  fallback_per_page: 10
 
+# ---------------------------------------------------------
+# SOURCES (enable/disable)
+# ---------------------------------------------------------
 sources:
-  - name: jsearch
-    type: jsearch
+  - type: jsearch          # RapidAPI (keep it)
     enabled: true
 
-      # Arbeitnow Free Job Board - No API key required!
-  - name: arbeitnow
-    type: arbeitnow
+  - type: remotive         # 100% FREE API
     enabled: true
+    limit: 50
 
-  # Example placeholder for HTML scrapers
-  - name: generic_html
-    type: html
+  - type: remoteok         # 100% FREE API
+    enabled: true
+    limit: 80
+
+  - type: weworkremotely   # 100% FREE (HTML parser)
+    enabled: true
+    limit: 30
+
+  # Optional web scraping endpoints (disabled by default)
+  - type: html
     enabled: false
-    # endpoint: "https://example.com/jobs?q={query}&l={city}"
+    endpoint: "https://example.com/search?q={query}&city={city}"
+    limit: 10
 
-posting:
-  default_author_id: 1
-  post_status: publish  # set 'draft' for manual review
-  categories: ["Engineering", "Remote"]
-  tags: ["tech", "jobs", "techjobs360"]
-  default_country_taxonomy: true  # whether to tag posts with the country name
-
+# ---------------------------------------------------------
+# DEDUP SETTINGS
+# ---------------------------------------------------------
 dedup:
-  file: posted_jobs.json
-  max_age_days: 90
+  max_age_days: 45     # clean old entries automatically
 
+# ---------------------------------------------------------
+# WORDPRESS POST SETTINGS
+# ---------------------------------------------------------
+posting:
+  post_status: publish   # publish / draft
+  tags:
+    - tech
+    - global-jobs
+    - verified
+
+# ---------------------------------------------------------
+# CONTINENTS + COUNTRIES + CITIES + JOB QUERIES
+# ---------------------------------------------------------
 continents:
-  # REDUCED TO 5 CITIES TOTAL TO STAY WITHIN FREE API QUOTA
+
+# ================= AFRICA =================
+  - id: africa
+    name: Africa
+    pause_seconds: 2
+    countries:
+      - code: NG
+        name: Nigeria
+        locales:
+          - city: Lagos
+            query: software engineer
+          - city: Abuja
+            query: frontend developer
+      - code: ZA
+        name: South Africa
+        locales:
+          - city: Cape Town
+            query: data scientist
+          - city: Johannesburg
+            query: devops engineer
+      - code: KE
+        name: Kenya
+        locales:
+          - city: Nairobi
+            query: backend engineer
+
+# ================= ASIA =================
   - id: asia
-    name: "Asia"
+    name: Asia
+    pause_seconds: 2
     countries:
       - code: IN
-        name: "India"
+        name: India
         locales:
-          - city: "Bengaluru"
-            query: "software engineer"
-          - city: "Mumbai"
-            query: "frontend developer"
+          - city: Bengaluru
+            query: software engineer
+          - city: Mumbai
+            query: frontend developer
+          - city: Hyderabad
+            query: full stack developer
+      - code: SG
+        name: Singapore
+        locales:
+          - city: Singapore
+            query: cloud engineer
+      - code: JP
+        name: Japan
+        locales:
+          - city: Tokyo
+            query: site reliability engineer
 
+# ================= EUROPE =================
+  - id: europe
+    name: Europe
+    pause_seconds: 2
+    countries:
+      - code: UK
+        name: United Kingdom
+        locales:
+          - city: London
+            query: backend engineer
+          - city: Manchester
+            query: software engineer
+      - code: DE
+        name: Germany
+        locales:
+          - city: Berlin
+            query: python developer
+      - code: FR
+        name: France
+        locales:
+          - city: Paris
+            query: data engineer
+
+# ================= NORTH AMERICA =================
   - id: north_america
-    name: "North America"
+    name: North America
+    pause_seconds: 2
     countries:
       - code: US
-        name: "United States"
+        name: United States
         locales:
-          - city: "San Francisco"
-            query: "backend engineer"
-          - city: "New York"
-            query: "devops engineer"
+          - city: San Francisco
+            query: backend engineer
+          - city: New York
+            query: devops engineer
+          - city: Seattle
+            query: machine learning engineer
+      - code: CA
+        name: Canada
+        locales:
+          - city: Toronto
+            query: frontend developer
+          - city: Vancouver
+            query: mobile engineer
 
-  - id: europe
-    name: "Europe"
+# ================= SOUTH AMERICA =================
+  - id: south_america
+    name: South America
+    pause_seconds: 2
     countries:
-      - code: GB
-        name: "United Kingdom"
+      - code: BR
+        name: Brazil
         locales:
-          - city: "London"
-            query: "backend engineer"
+          - city: Sao Paulo
+            query: software engineer
+      - code: AR
+        name: Argentina
+        locales:
+          - city: Buenos Aires
+            query: data scientist
 
-region_defaults:
-  per_page: 20
-  remote_allowed: true
+# ================= OCEANIA =================
+  - id: oceania
+    name: Oceania
+    pause_seconds: 2
+    countries:
+      - code: AU
+        name: Australia
+        locales:
+          - city: Sydney
+            query: devops engineer
+          - city: Melbourne
+            query: backend developer
+      - code: NZ
+        name: New Zealand
+        locales:
+          - city: Auckland
+            query: software engineer
 
-# Optional overrides by country or region (example)
-overrides:
-  IN:
-    per_page: 30
-    languages: ["en", "hi"]  # extra languages for India
+# ================= ANTARCTICA =================
+  - id: antarctica
+    name: Antarctica
+    pause_seconds: 2
+    countries:
+      - code: AQ
+        name: Antarctica
+        locales:
+          - city: Antarctica Base
+            query: researcher
