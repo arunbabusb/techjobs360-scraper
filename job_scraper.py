@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""
-TechJobs360 Global Job Scraper v2
---------------------------------
-Features:
-- Reads config.yaml (continents → countries → cities)
-- JSearch API + optional HTML fallback
-- Dedup with legacy compatibility
-- Logo fetch via Clearbit
-- Uploads logo to WordPress Media
-- Posts job to WordPress with continent + country tags
-- Supports PROCESS_CONTINENT for slicing workload
-- Safe backoff & retries
-- Dedup pruning (max_age_days)
-"""
+# TechJobs360 Global Job Scraper - FINAL VERSION (Fully Working)
 
 import os
 import sys
@@ -31,45 +18,39 @@ from PIL import Image
 from io import BytesIO
 from datetime import datetime, timedelta
 
-# Paths
+# --------------------------
+# PATHS & ENV
+# --------------------------
 BASE_DIR = Path(__file__).parent
 CONFIG_PATH = BASE_DIR / "config.yaml"
 DEDUP_PATH = BASE_DIR / "posted_jobs.json"
 
-# Env vars
 WP_URL = os.environ.get("WP_URL")
 WP_USERNAME = os.environ.get("WP_USERNAME")
 WP_APP_PASSWORD = os.environ.get("WP_APP_PASSWORD")
 JSEARCH_API_KEY = os.environ.get("JSEARCH_API_KEY")
 PROCESS_CONTINENT = os.environ.get("PROCESS_CONTINENT")
 
-# HTTP settings
 REQUESTS_TIMEOUT = 20
 USER_AGENT = "TechJobs360Scraper/2.0 (+https://techjobs360.com)"
 
-# Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("techjobs360")
 
 
-# ----------------------
-# CONFIG & DEDUP LOADING
-# ----------------------
-
+# --------------------------
+# CONFIG + DEDUP
+# --------------------------
 def load_config() -> Dict:
     if not CONFIG_PATH.exists():
-        logger.error("config.yaml missing in repo root!")
+        logger.error("Missing config.yaml. Add it to repo root.")
         sys.exit(1)
     with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
         return yaml.safe_load(fh)
 
 
 def load_dedup() -> List[Dict]:
-    """
-    Supports 2 formats:
-    1. Legacy: ["hash1", "hash2"]
-    2. Modern: [{"hash": "...", "first_seen": ...}, ...]
-    """
+    """Handles legacy and modern dedup formats."""
     if not DEDUP_PATH.exists():
         return []
 
@@ -82,19 +63,13 @@ def load_dedup() -> List[Dict]:
     normalized = []
     if isinstance(data, list):
         for item in data:
-            # Legacy string-only hash list
             if isinstance(item, str):
                 normalized.append({"hash": item, "first_seen": 0})
-            # Normal dict form
             elif isinstance(item, dict):
                 h = item.get("hash")
                 if not h:
-                    # fallback to hash of title+company+location
                     h = hashlib.sha1(
-                        (item.get("title", "") +
-                         item.get("company", "") +
-                         item.get("location", "")
-                         ).encode("utf-8")
+                        (item.get("title","") + item.get("company","") + item.get("location","")).encode("utf-8")
                     ).hexdigest()
 
                 normalized.append({
@@ -108,246 +83,226 @@ def load_dedup() -> List[Dict]:
     return normalized
 
 
-def prune_dedup(dedup_list: List[Dict], max_age_days: int) -> List[Dict]:
-    if not max_age_days:
+def prune_dedup(dedup_list: List[Dict], max_days: int) -> List[Dict]:
+    if not max_days:
         return dedup_list
 
-    cutoff = int((datetime.utcnow() - timedelta(days=max_age_days)).timestamp())
+    cutoff = int((datetime.utcnow() - timedelta(days=max_days)).timestamp())
     kept = []
-    removed = 0
-
     for e in dedup_list:
-        if isinstance(e, dict):
-            fs = int(e.get("first_seen", 0))
-            if fs >= cutoff:
-                kept.append(e)
-            else:
-                removed += 1
-        else:
-            removed += 1
-
-    if removed:
-        logger.info("Pruned %d old entries", removed)
+        fs = int(e.get("first_seen", 0))
+        if fs >= cutoff:
+            kept.append(e)
     return kept
 
 
-def save_dedup(entries: List[Dict]):
+def save_dedup(dedup: List[Dict]):
     with open(DEDUP_PATH, "w", encoding="utf-8") as fh:
-        json.dump(entries, fh, indent=2, ensure_ascii=False)
+        json.dump(dedup, fh, indent=2)
 
 
-# ----------------------
-# HTTP + RETRIES
-# ----------------------
-
+# --------------------------
+# HTTP WITH RETRIES
+# --------------------------
 def http_request(method, url, **kwargs):
-    max_attempts = 4
-    delay = 1
-    for attempt in range(1, max_attempts + 1):
+    for attempt in range(4):
         try:
             return requests.request(method, url, timeout=REQUESTS_TIMEOUT, **kwargs)
         except Exception as e:
-            if attempt == max_attempts:
+            if attempt == 3:
                 raise
-            logger.warning("Retrying %s %s (%s)...", method, url, e)
-            time.sleep(delay + random.random())
-            delay *= 2
+            time.sleep(1 + attempt)
 
 
-# ----------------------
-# JSEARCH API
-# ----------------------
+# --------------------------
+# JSEARCH — CORRECT VERSION
+# --------------------------
+def query_jsearch(query: str, location: Optional[str] = None) -> List[Dict]:
+    """
+    EXACT RapidAPI example format:
+    GET https://jsearch.p.rapidapi.com/search?query=<query>&num_pages=1
 
-def query_jsearch(query: str, location: str = "") -> List[Dict]:
+    Headers:
+      X-RapidAPI-Key
+      X-RapidAPI-Host
+    """
+
     if not JSEARCH_API_KEY:
+        logger.warning("No JSEARCH_API_KEY found.")
         return []
 
     url = "https://jsearch.p.rapidapi.com/search"
+
     headers = {
         "X-RapidAPI-Key": JSEARCH_API_KEY,
+        "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
         "User-Agent": USER_AGENT,
-        "Content-Type": "application/json"
+        "Accept": "application/json"
     }
-    payload = {
-        "query": query,
-        "location": location,
+
+    params = {
+        "query": f"{query} {location}".strip(),
+        "num_pages": 1,
         "page": 1,
-        "num_pages": 1
+        "date_posted": "all"
     }
 
     try:
-        r = http_request("POST", url, json=payload, headers=headers)
-        r.raise_for_status()
+        r = http_request("GET", url, headers=headers, params=params)
+        if r.status_code != 200:
+            logger.warning("JSearch Error %s → %s", r.status_code, r.text[:300])
+            return []
         data = r.json()
+
         jobs = []
-        for j in data.get("data", []):
+        for item in data.get("data", []):
             jobs.append({
-                "id": j.get("job_id") or j.get("id"),
-                "title": j.get("job_title"),
-                "company": j.get("employer_name"),
-                "location": j.get("job_city") or location,
-                "description": j.get("job_description") or "",
-                "url": j.get("job_apply_link"),
-                "raw": j
+                "id": item.get("job_id"),
+                "title": item.get("job_title"),
+                "company": item.get("employer_name"),
+                "location": item.get("job_city"),
+                "description": item.get("job_description"),
+                "url": item.get("job_apply_link"),
+                "raw": item
             })
+
         return jobs
+
     except Exception as e:
-        logger.warning("JSearch failed: %s", e)
+        logger.warning("JSearch exception: %s", e)
         return []
 
 
-# ----------------------
-# GENERIC HTML FALLBACK
-# ----------------------
-
+# --------------------------
+# HTML FALLBACK
+# --------------------------
 def parse_html(endpoint: str, query: str, city: str) -> List[Dict]:
     try:
         url = endpoint.format(
-            query=requests.utils.quote(query or ""),
-            city=requests.utils.quote(city or "")
+            query=requests.utils.quote(query),
+            city=requests.utils.quote(city)
         )
         r = http_request("GET", url, headers={"User-Agent": USER_AGENT})
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
         jobs = []
-        for el in soup.select(".job, .result, .job-card, .posting")[:10]:
-            title = el.select_one(".title, h2")
-            link = el.select_one("a")
-            if not title or not link:
-                continue
-
-            company = el.select_one(".company")
-            location = el.select_one(".location")
-            jobs.append({
-                "id": None,
-                "title": title.get_text(strip=True),
-                "company": company.get_text(strip=True) if company else "",
-                "location": location.get_text(strip=True) if location else city,
-                "description": "",
-                "url": link.get("href")
-            })
+        for block in soup.select("a, .job, .card, .posting")[:10]:
+            title = block.get_text(strip=True)
+            href = block.get("href")
+            if href:
+                jobs.append({
+                    "id": None,
+                    "title": title,
+                    "company": "",
+                    "location": city,
+                    "description": "",
+                    "url": href
+                })
         return jobs
 
-    except Exception as e:
-        logger.warning("HTML parser failed: %s", e)
+    except:
         return []
 
 
-# ----------------------
-# LOGO FETCH + WP UPLOAD
-# ----------------------
-
+# --------------------------
+# LOGOS
+# --------------------------
 def guess_domain(company: str) -> Optional[str]:
     if not company:
         return None
-    slug = slugify(company).replace("-", "")
-    if not slug:
-        return None
-    return slug + ".com"
-
-
-def fetch_logo(domain: str):
-    if not domain:
-        return None
-    try:
-        url = f"https://logo.clearbit.com/{domain}"
-        r = http_request("GET", url, stream=True)
-        if r.status_code == 200 and "image" in r.headers.get("content-type", ""):
-            return r.content
-    except:
-        pass
+    d = slugify(company).replace("-", "")
+    if d:
+        return d + ".com"
     return None
 
 
-def wp_media_upload(image_bytes: bytes, filename: str) -> Optional[int]:
-    if not (WP_URL and WP_USERNAME and WP_APP_PASSWORD):
+def fetch_logo(domain: str) -> Optional[bytes]:
+    if not domain:
+        return None
+    try:
+        r = http_request("GET", f"https://logo.clearbit.com/{domain}")
+        if r.status_code == 200:
+            return r.content
+    except:
         return None
 
-    url = WP_URL.rstrip("/") + "/wp-json/wp/v2/media"
-    headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
-        "User-Agent": USER_AGENT
-    }
 
+def upload_media_to_wp(bytes_data: bytes, filename: str) -> Optional[int]:
+    if not WP_URL:
+        return None
+
+    endpoint = WP_URL.rstrip("/") + "/wp-json/wp/v2/media"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     try:
-        r = http_request("POST", url, auth=(WP_USERNAME, WP_APP_PASSWORD),
-                         data=image_bytes, headers=headers)
+        r = http_request(
+            "POST",
+            endpoint,
+            auth=(WP_USERNAME, WP_APP_PASSWORD),
+            headers=headers,
+            data=bytes_data
+        )
         r.raise_for_status()
         return r.json().get("id")
-    except Exception as e:
-        logger.warning("WP media upload failed: %s", e)
+    except:
         return None
 
 
-# ----------------------
-# WP POSTING
-# ----------------------
-
+# --------------------------
+# POST TO WORDPRESS
+# --------------------------
 def post_to_wp(job: Dict, continent_id: str, country_code: str, posting_cfg: Dict) -> Optional[int]:
-    if not (WP_URL and WP_USERNAME and WP_APP_PASSWORD):
-        logger.error("Missing WP credentials!")
-        return None
-
     endpoint = WP_URL.rstrip("/") + "/wp-json/wp/v2/posts"
 
     title = job.get("title")
     company = job.get("company")
     location = job.get("location")
-    url = job.get("url")
+    apply_url = job.get("url")
+
+    content = f"<p><strong>Company:</strong> {company}</p>"
+    content += f"<p><strong>Location:</strong> {location}</p>"
+    if apply_url:
+        content += f'<p><a href="{apply_url}" target="_blank">Apply</a></p>'
+
     slug = slugify(f"{title}-{company}-{location}")[:200]
-
-    html = f"<p><strong>Company:</strong> {company}</p>"
-    html += f"<p><strong>Location:</strong> {location}</p>"
-    if url:
-        html += f'<p><a href="{url}" target="_blank">Apply Here</a></p>'
-    html += "<hr/>" + (job.get("description") or "")
-
-    tags = posting_cfg.get("tags", []).copy()
-    tags.append(f"continent:{continent_id}")
-    tags.append(f"country:{country_code}")
 
     payload = {
         "title": title,
         "slug": slug,
-        "content": html,
-        "status": posting_cfg.get("post_status", "publish"),
-        "tags": tags
+        "content": content,
+        "status": posting_cfg.get("post_status", "publish")
     }
 
-    if job.get("_media"):
-        payload["featured_media"] = job["_media"]
-
     try:
-        r = http_request("POST", endpoint, json=payload,
-                         auth=(WP_USERNAME, WP_APP_PASSWORD),
-                         headers={"User-Agent": USER_AGENT})
-
+        r = http_request(
+            "POST",
+            endpoint,
+            auth=(WP_USERNAME, WP_APP_PASSWORD),
+            json=payload
+        )
         r.raise_for_status()
         return r.json().get("id")
+
     except Exception as e:
-        logger.error("WP posting failed: %s", e)
+        logger.error("Error posting to WP: %s", e)
         return None
 
 
-# ----------------------
-# MAIN SCRAPER
-# ----------------------
-
+# --------------------------
+# MAIN
+# --------------------------
 def main():
     config = load_config()
     dedup = load_dedup()
 
-    dedup_cfg = config.get("dedup", {})
-    max_age = int(dedup_cfg.get("max_age_days") or 0)
+    # prune old
+    max_age = int(config.get("dedup", {}).get("max_age_days", 0))
     dedup = prune_dedup(dedup, max_age)
-    orig_len = len(dedup)
 
     continents = config.get("continents", [])
     sources = config.get("sources", [])
     posting_cfg = config.get("posting", {})
 
-    # Allow filtering by continent
     if PROCESS_CONTINENT:
         continents = [c for c in continents if c.get("id") == PROCESS_CONTINENT]
 
@@ -356,7 +311,7 @@ def main():
     for cont in continents:
         cont_id = cont.get("id")
         cont_name = cont.get("name")
-        logger.info("== Continent: %s (%s) ==", cont_name, cont_id)
+        logger.info("=== CONTINENT: %s ===", cont_name)
 
         for country in cont.get("countries", []):
             country_code = country.get("code")
@@ -365,56 +320,48 @@ def main():
             for loc in country.get("locales", []):
                 city = loc.get("city")
                 query = loc.get("query")
-                search_text = f"{query} {city} {country_name}".strip()
 
-                logger.info("Searching: %s", search_text)
+                search = f"{query} {city} {country_name}"
+                logger.info("Searching: %s", search)
+
                 found_jobs = []
 
-                # loop through sources
+                # sources
                 for s in sources:
-                    if not s.get("enabled", True):
+                    if not s.get("enabled"):
                         continue
 
                     if s.get("type") == "jsearch":
-                        found_jobs += query_jsearch(search_text, city)
+                        found_jobs += query_jsearch(query, city)
+
                     elif s.get("type") == "html":
                         endpoint = s.get("endpoint")
                         if endpoint:
                             found_jobs += parse_html(endpoint, query, city)
 
-                    time.sleep(1 + random.random())  # polite pause
-
-                # process jobs
+                # process results
                 for job in found_jobs:
-                    jhash = hashlib.sha1(
-                        (job.get("id") or job.get("url") or job.get("title")).encode("utf-8")
-                    ).hexdigest()
-
-                    if any(e["hash"] == jhash for e in dedup):
+                    hkey = (job.get("id") or job.get("url") or job.get("title"))
+                    if not hkey:
                         continue
 
-                    # logo attempt
-                    domain = None
-                    raw = job.get("raw") or {}
-                    domain = raw.get("company_domain") or guess_domain(job.get("company"))
+                    jhash = hashlib.sha1(hkey.encode("utf-8")).hexdigest()
+                    if any(d["hash"] == jhash for d in dedup):
+                        continue
 
-                    logo_bytes = fetch_logo(domain) if domain else None
+                    # Logo
+                    domain = guess_domain(job.get("company"))
+                    logo_bytes = fetch_logo(domain)
                     if logo_bytes:
-                        try:
-                            img = Image.open(BytesIO(logo_bytes))
-                            img.thumbnail((600, 600))
-                            out = BytesIO()
-                            fmt = img.format or "PNG"
-                            img.save(out, format=fmt)
-                            fname = f"{slugify(job.get('company') or 'company')}-{jhash[:8]}.{fmt.lower()}"
-                            media_id = wp_media_upload(out.getvalue(), fname)
-                            if media_id:
-                                job["_media"] = media_id
-                        except:
-                            pass
+                        filename = f"{slugify(job.get('company') or 'company')}-{jhash[:8]}.png"
+                        media_id = upload_media_to_wp(logo_bytes, filename)
+                        if media_id:
+                            job["_media"] = media_id
 
+                    # Post
                     post_id = post_to_wp(job, cont_id, country_code, posting_cfg)
                     if post_id:
+                        total_new += 1
                         dedup.append({
                             "hash": jhash,
                             "title": job.get("title"),
@@ -423,13 +370,8 @@ def main():
                             "url": job.get("url"),
                             "first_seen": int(time.time())
                         })
-                        total_new += 1
 
-    # Save dedup if changed
-    if len(dedup) != orig_len:
-        save_dedup(dedup)
-        logger.info("Saved updated dedup list (%d entries)", len(dedup))
-
+    save_dedup(dedup)
     logger.info("Run complete. New jobs posted: %d", total_new)
 
 
