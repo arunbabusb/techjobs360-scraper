@@ -174,6 +174,51 @@ def query_jsearch(query: str, location: Optional[str] = None) -> List[Dict]:
 
 
 # --------------------------
+
+# --------------------------
+# ARBEITNOW - FREE (NO API KEY)
+# --------------------------
+def query_arbeitnow(query: str) -> List[Dict]:
+    """
+    Arbeitnow Free Job Board API - No API key required!
+    Provides jobs from multiple sources including Stack Overflow, LinkedIn, etc.
+    """
+    url = "https://arbeitnow-free-job-board.p.rapidapi.com/api/job-board-api"
+    
+    headers = {
+        "X-RapidAPI-Host": "arbeitnow-free-job-board.p.rapidapi.com",
+        "User-Agent": USER_AGENT
+    }
+    
+    try:
+        r = http_request("GET", url, headers=headers)
+        if r.status_code != 200:
+            logger.warning("Arbeitnow Error %s", r.status_code)
+            return []
+        
+        data = r.json()
+        jobs = []
+        
+        for item in data.get("data", []):
+            # Filter by query keywords
+            title = item.get("title", "").lower()
+            if query.lower() in title:
+                jobs.append({
+                    "id": item.get("slug"),
+                    "title": item.get("title"),
+                    "company": item.get("company_name"),
+                    "location": item.get("location"),
+                    "description": item.get("description", "")[:500],
+                    "url": item.get("url"),
+                    "raw": item
+                })
+        
+        logger.info("Arbeitnow found %d jobs for query: %s", len(jobs), query)
+        return jobs[:10]  # Return max 10 jobs
+    
+    except Exception as e:
+        logger.warning("Arbeitnow exception: %s", e)
+        return []if s.get("type") == "jsearch":
 # HTML FALLBACK
 # --------------------------
 def parse_html(endpoint: str, query: str, city: str) -> List[Dict]:
@@ -333,6 +378,8 @@ def main():
 
                     if s.get("type") == "jsearch":
                         found_jobs += query_jsearch(query, city)
+                                        elif s.get("type") == "arbeitnow":
+                    found_jobs += query_arbeitnow(query)
 
                     elif s.get("type") == "html":
                         endpoint = s.get("endpoint")
