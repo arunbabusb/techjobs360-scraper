@@ -1,4 +1,4 @@
-# config.yaml - TechJobs360 global scraping configuration
+# config.yaml - TechJobs360 global scraping configuration - REDUCED FOR FREE API PLAN
 # Organized by continent -> countries -> locales (cities / search queries)
 #
 # Edit queries and city lists as you need. Keep file in repo root
@@ -24,7 +24,7 @@ sources:
 
 posting:
   default_author_id: 1
-  post_status: publish      # set 'draft' for manual review
+  post_status: publish  # set 'draft' for manual review
   categories: ["Engineering", "Remote"]
   tags: ["tech", "jobs", "techjobs360"]
   default_country_taxonomy: true  # whether to tag posts with the country name
@@ -34,29 +34,7 @@ dedup:
   max_age_days: 90
 
 continents:
-  - id: africa
-    name: "Africa"
-    countries:
-      - code: NG
-        name: "Nigeria"
-        locales:
-          - city: "Lagos"
-            query: "software engineer"
-          - city: "Abuja"
-            query: "frontend developer"
-      - code: KE
-        name: "Kenya"
-        locales:
-          - city: "Nairobi"
-            query: "backend engineer"
-      - code: ZA
-        name: "South Africa"
-        locales:
-          - city: "Cape Town"
-            query: "data scientist"
-          - city: "Johannesburg"
-            query: "devops engineer"
-
+  # REDUCED TO 5 CITIES TOTAL TO STAY WITHIN FREE API QUOTA
   - id: asia
     name: "Asia"
     countries:
@@ -67,39 +45,6 @@ continents:
             query: "software engineer"
           - city: "Mumbai"
             query: "frontend developer"
-          - city: "Hyderabad"
-            query: "full stack developer"
-      - code: SG
-        name: "Singapore"
-        locales:
-          - city: "Singapore"
-            query: "cloud engineer"
-      - code: JP
-        name: "Japan"
-        locales:
-          - city: "Tokyo"
-            query: "site reliability engineer"
-
-  - id: europe
-    name: "Europe"
-    countries:
-      - code: GB
-        name: "United Kingdom"
-        locales:
-          - city: "London"
-            query: "backend engineer"
-          - city: "Manchester"
-            query: "software engineer"
-      - code: DE
-        name: "Germany"
-        locales:
-          - city: "Berlin"
-            query: "python developer"
-      - code: FR
-        name: "France"
-        locales:
-          - city: "Paris"
-            query: "data engineer"
 
   - id: north_america
     name: "North America"
@@ -111,50 +56,15 @@ continents:
             query: "backend engineer"
           - city: "New York"
             query: "devops engineer"
-          - city: "Seattle"
-            query: "machine learning engineer"
-      - code: CA
-        name: "Canada"
-        locales:
-          - city: "Toronto"
-            query: "frontend developer"
-          - city: "Vancouver"
-            query: "mobile engineer"
 
-  - id: south_america
-    name: "South America"
+  - id: europe
+    name: "Europe"
     countries:
-      - code: BR
-        name: "Brazil"
+      - code: GB
+        name: "United Kingdom"
         locales:
-          - city: "Sao Paulo"
-            query: "software engineer"
-      - code: AR
-        name: "Argentina"
-        locales:
-          - city: "Buenos Aires"
-            query: "data scientist"
-
-  - id: oceania
-    name: "Oceania"
-    countries:
-      - code: AU
-        name: "Australia"
-        locales:
-          - city: "Sydney"
-            query: "devops engineer"
-          - city: "Melbourne"
-            query: "backend developer"
-      - code: NZ
-        name: "New Zealand"
-        locales:
-          - city: "Auckland"
-            query: "software engineer"
-
-  - id: antarctica
-    name: "Antarctica"
-    # Rare jobs — kept for completeness; usually none
-    countries: []
+          - city: "London"
+            query: "backend engineer"
 
 region_defaults:
   per_page: 20
@@ -164,6 +74,4 @@ region_defaults:
 overrides:
   IN:
     per_page: 30
-    languages: ["en", "hi"]        # extra languages for India
-  JP:
-    languages: ["ja", "en"]
+    languages: ["en", "hi"]  # extra languages for India
