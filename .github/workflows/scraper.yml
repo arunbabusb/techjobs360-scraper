@@ -1,15 +1,14 @@
 name: TechJobs360 FREE Scraper
 
 permissions:
-  contents: write  # allow committing posted_jobs.json
-  id-token: write
+  contents: write
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
-  # Runs once daily at 6:00 AM IST (UTC+5:30). 00:30 UTC == 06:00 IST
   schedule:
+    # Runs once daily at 06:00 IST (00:30 UTC)
     - cron: '30 0 * * *'
 
 jobs:
@@ -28,23 +27,24 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Run FREE job scraper
         env:
-          WP_URL: ${{ secrets.WP_URL }}                 # e.g. https://yourwp.example.com
-          WP_USERNAME: ${{ secrets.WP_USERNAME }}       # WordPress user (for app password)
-          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}# WP Application Password
-          JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}# Optional: JSearch / other API
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WP_URL: ${{ secrets.WP_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+          JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}
+          PROCESS_CONTINENT: ${{ secrets.PROCESS_CONTINENT }}
         run: python job_scraper.py
 
-      - name: Commit and push dedup file (if changed)
+      - name: Commit and push dedup file if changed
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           git add posted_jobs.json || true
-
           if git diff --cached --quiet; then
             echo "No new jobs to commit."
           else
