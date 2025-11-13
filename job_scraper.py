@@ -486,9 +486,10 @@ def post_job_to_wordpress(job: Dict) -> bool:
                 '_job_type': job_type_mapped,
                 '_company_logo': logo_url,
                 '_source': job.get('source', 'JSearch API'),
-            ,
-        'job_listing_region': [region_term_id] if region_term_id else []    '_posted_date': job.get('job_posted_at_datetime_utc', '')
-            }
+            '_posted_date': job.get('job_posted_at_datetime_utc', '')
+        },
+        'job_listing_region': [region_term_id] if region_term_id else []
+            
         }
 
         if DRY_RUN:
