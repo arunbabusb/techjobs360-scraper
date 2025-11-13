@@ -1,27 +1,169 @@
-regions:
-  - id: india
-    country: "India"
-    locales:
-      - city: "Bengaluru"
-        query: "software engineer"
-      - city: "Mumbai"
-        query: "frontend developer"
+# config.yaml - TechJobs360 global scraping configuration
+# Organized by continent -> countries -> locales (cities / search queries)
+#
+# Edit queries and city lists as you need. Keep file in repo root
+# alongside job_scraper.py
 
-  - id: usa
-    country: "United States"
-    locales:
-      - city: "San Francisco"
-        query: "backend engineer"
-      - city: "New York"
-        query: "devops engineer"
+global:
+  default_per_page: 20
+  allow_remote: true
+  languages:
+    - en
+  timezone_note: "Query times are in local zones. Configure sources respecting local rate limits."
 
 sources:
   - name: jsearch
     type: jsearch
     enabled: true
 
+  # Example placeholder for HTML scrapers
+  - name: generic_html
+    type: html
+    enabled: false
+    # endpoint: "https://example.com/jobs?q={query}&l={city}"
+
 posting:
   default_author_id: 1
-  post_status: publish
-  categories: ["Engineering"]
-  tags: ["tech", "jobs"]
+  post_status: publish      # set 'draft' for manual review
+  categories: ["Engineering", "Remote"]
+  tags: ["tech", "jobs", "techjobs360"]
+  default_country_taxonomy: true  # whether to tag posts with the country name
+
+dedup:
+  file: posted_jobs.json
+  max_age_days: 90
+
+continents:
+  - id: africa
+    name: "Africa"
+    countries:
+      - code: NG
+        name: "Nigeria"
+        locales:
+          - city: "Lagos"
+            query: "software engineer"
+          - city: "Abuja"
+            query: "frontend developer"
+      - code: KE
+        name: "Kenya"
+        locales:
+          - city: "Nairobi"
+            query: "backend engineer"
+      - code: ZA
+        name: "South Africa"
+        locales:
+          - city: "Cape Town"
+            query: "data scientist"
+          - city: "Johannesburg"
+            query: "devops engineer"
+
+  - id: asia
+    name: "Asia"
+    countries:
+      - code: IN
+        name: "India"
+        locales:
+          - city: "Bengaluru"
+            query: "software engineer"
+          - city: "Mumbai"
+            query: "frontend developer"
+          - city: "Hyderabad"
+            query: "full stack developer"
+      - code: SG
+        name: "Singapore"
+        locales:
+          - city: "Singapore"
+            query: "cloud engineer"
+      - code: JP
+        name: "Japan"
+        locales:
+          - city: "Tokyo"
+            query: "site reliability engineer"
+
+  - id: europe
+    name: "Europe"
+    countries:
+      - code: GB
+        name: "United Kingdom"
+        locales:
+          - city: "London"
+            query: "backend engineer"
+          - city: "Manchester"
+            query: "software engineer"
+      - code: DE
+        name: "Germany"
+        locales:
+          - city: "Berlin"
+            query: "python developer"
+      - code: FR
+        name: "France"
+        locales:
+          - city: "Paris"
+            query: "data engineer"
+
+  - id: north_america
+    name: "North America"
+    countries:
+      - code: US
+        name: "United States"
+        locales:
+          - city: "San Francisco"
+            query: "backend engineer"
+          - city: "New York"
+            query: "devops engineer"
+          - city: "Seattle"
+            query: "machine learning engineer"
+      - code: CA
+        name: "Canada"
+        locales:
+          - city: "Toronto"
+            query: "frontend developer"
+          - city: "Vancouver"
+            query: "mobile engineer"
+
+  - id: south_america
+    name: "South America"
+    countries:
+      - code: BR
+        name: "Brazil"
+        locales:
+          - city: "Sao Paulo"
+            query: "software engineer"
+      - code: AR
+        name: "Argentina"
+        locales:
+          - city: "Buenos Aires"
+            query: "data scientist"
+
+  - id: oceania
+    name: "Oceania"
+    countries:
+      - code: AU
+        name: "Australia"
+        locales:
+          - city: "Sydney"
+            query: "devops engineer"
+          - city: "Melbourne"
+            query: "backend developer"
+      - code: NZ
+        name: "New Zealand"
+        locales:
+          - city: "Auckland"
+            query: "software engineer"
+
+  - id: antarctica
+    name: "Antarctica"
+    # Rare jobs — kept for completeness; usually none
+    countries: []
+
+region_defaults:
+  per_page: 20
+  remote_allowed: true
+
+# Optional overrides by country or region (example)
+overrides:
+  IN:
+    per_page: 30
+    languages: ["en", "hi"]        # extra languages for India
+  JP:
+    languages: ["ja", "en"]
