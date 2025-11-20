@@ -23,11 +23,11 @@ import logging
 import hashlib
 import random
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 import requests
 import yaml
-from bs4 import BeautifulSoup
 from slugify import slugify
+from bs4 import BeautifulSoup
 from PIL import Image
 from io import BytesIO
 from datetime import datetime, timedelta
@@ -52,6 +52,7 @@ USER_AGENT = "TechJobs360Scraper-final (+https://techjobs360.com)"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("techjobs360")
 
+
 # -------------------------
 # Helpers: config & dedup
 # -------------------------
@@ -61,6 +62,7 @@ def load_config() -> Dict:
         sys.exit(1)
     with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
         return yaml.safe_load(fh) or {}
+
 
 def load_dedup() -> List[Dict]:
     if not DEDUP_PATH.exists():
@@ -93,12 +95,14 @@ def load_dedup() -> List[Dict]:
         logger.warning("Unexpected dedup format; using empty list")
     return normalized
 
+
 def save_dedup(entries: List[Dict]):
     try:
         with open(DEDUP_PATH, "w", encoding="utf-8") as fh:
             json.dump(entries, fh, indent=2, ensure_ascii=False)
     except Exception as e:
         logger.warning("Failed to save dedup file: %s", e)
+
 
 def prune_dedup(dedup: List[Dict], max_age_days: int) -> List[Dict]:
     if not max_age_days:
@@ -118,6 +122,7 @@ def prune_dedup(dedup: List[Dict], max_age_days: int) -> List[Dict]:
         logger.info("Pruned %d old dedup entries", removed)
     return kept
 
+
 # -------------------------
 # HTTP with retries/backoff
 # -------------------------
@@ -131,12 +136,13 @@ def http_request(method: str, url: str, **kwargs) -> requests.Response:
                 headers["User-Agent"] = USER_AGENT
             return requests.request(method, url, timeout=REQUESTS_TIMEOUT, headers=headers, **kwargs)
         except Exception as e:
+            logger.debug("HTTP error %s %s (attempt %d/%d): %s", method, url, attempt, attempts, e)
             if attempt == attempts:
                 raise
-            logger.debug("HTTP error %s %s (attempt %d/%d): %s", method, url, attempt, attempts, e)
             time.sleep(delay + random.random())
             delay *= 2
     raise RuntimeError("unreachable")
+
 
 # -------------------------
 # RapidAPI JSearch (kept)
@@ -174,6 +180,7 @@ def query_jsearch(query: str, location: Optional[str] = None, per_page: int = 20
         logger.warning("JSearch exception: %s", e)
         return []
 
+
 # -------------------------
 # Free APIs: Remotive, RemoteOK
 # -------------------------
@@ -202,6 +209,7 @@ def query_remotive(query: str, limit: int = 50) -> List[Dict]:
         logger.warning("Remotive error: %s", e)
         return []
 
+
 def query_remoteok(query: str, limit: int = 80) -> List[Dict]:
     try:
         url = "https://remoteok.com/api"
@@ -215,7 +223,6 @@ def query_remoteok(query: str, limit: int = 80) -> List[Dict]:
         qlow = (query or "").lower()
         jobs = []
         for item in data:
-            # metadata row check
             if not item.get("id"):
                 continue
             title = item.get("position") or item.get("title") or ""
@@ -239,6 +246,7 @@ def query_remoteok(query: str, limit: int = 80) -> List[Dict]:
         logger.warning("RemoteOK error: %s", e)
         return []
 
+
 # -------------------------
 # WeWorkRemotely HTML parse
 # -------------------------
@@ -251,7 +259,6 @@ def parse_weworkremotely(query: str, limit: int = 30) -> List[Dict]:
             return []
         soup = BeautifulSoup(resp.text, "html.parser")
         jobs = []
-        # site layout: sections with job links
         for a in soup.select("section.jobs article a, section.jobs ul li a")[:limit]:
             href = a.get("href")
             title_el = a.select_one(".title") or a.select_one("span.title") or a.select_one("h2") or a
@@ -275,13 +282,11 @@ def parse_weworkremotely(query: str, limit: int = 30) -> List[Dict]:
         logger.warning("WeWorkRemotely parse failed: %s", e)
         return []
 
+
 # -------------------------
 # Indeed HTML parse (careful)
 # -------------------------
 def parse_indeed(query: str, city: Optional[str] = None, limit: int = 20) -> List[Dict]:
-    """
-    Basic Indeed parser. Note: Indeed may block heavy scraping or require query params; use politely.
-    """
     try:
         base = "https://www.indeed.com/jobs"
         params = {"q": query or "", "l": city or ""}
@@ -313,14 +318,11 @@ def parse_indeed(query: str, city: Optional[str] = None, limit: int = 20) -> Lis
         logger.warning("Indeed parse failed: %s", e)
         return []
 
+
 # -------------------------
 # LinkedIn HTML parse (BEST EFFORT; often requires login)
 # -------------------------
 def parse_linkedin(query: str, location: Optional[str] = None, limit: int = 15) -> List[Dict]:
-    """
-    LinkedIn search pages sometimes return job cards without login, sometimes not.
-    Use cautiously and expect 200/403 depending on region.
-    """
     try:
         url = "https://www.linkedin.com/jobs/search/"
         params = {"keywords": query or "", "location": location or ""}
@@ -350,6 +352,7 @@ def parse_linkedin(query: str, location: Optional[str] = None, limit: int = 15) 
         logger.warning("LinkedIn parse failed: %s", e)
         return []
 
+
 # -------------------------
 # Logo fetch + WP upload
 # -------------------------
@@ -365,6 +368,7 @@ def fetch_logo(domain: str) -> Optional[bytes]:
         pass
     return None
 
+
 def upload_media_to_wp(image_bytes: bytes, filename: str) -> Optional[int]:
     if not (WP_URL and WP_USERNAME and WP_APP_PASSWORD):
         return None
@@ -377,6 +381,7 @@ def upload_media_to_wp(image_bytes: bytes, filename: str) -> Optional[int]:
     except Exception as e:
         logger.warning("WP media upload failed: %s", e)
         return None
+
 
 # -------------------------
 # Post to WordPress
@@ -391,15 +396,18 @@ def post_to_wp(job: Dict, continent_id: str, country_code: str, posting_cfg: Dic
     location = job.get("location") or ""
     apply_url = job.get("url") or ""
     slug = slugify(f"{title}-{company}-{location}")[:200]
+
     content = f"<p><strong>Company:</strong> {company}</p>"
     content += f"<p><strong>Location:</strong> {location}</p>"
     if apply_url:
-        content += f'<p><a href="{apply_url}" target="_blank" rel="noopener">Apply</a></p>'
+        content += f'<p><strong>Apply:</strong> <a href="{apply_url}" target="_blank" rel="noopener">{apply_url}</a></p>'
     content += "<hr/>" + (job.get("description") or "")
+
     tags = (posting_cfg.get("tags") or [])[:]
     tags.append(f"continent:{continent_id}")
     if country_code:
         tags.append(f"country:{country_code}")
+
     payload = {
         "title": title,
         "content": content,
@@ -407,17 +415,20 @@ def post_to_wp(job: Dict, continent_id: str, country_code: str, posting_cfg: Dic
         "status": posting_cfg.get("post_status", "draft"),
         "tags": tags
     }
+
     if job.get("_featured_media_id"):
         payload["featured_media"] = job.get("_featured_media_id")
+
     try:
         resp = http_request("POST", endpoint, auth=(WP_USERNAME, WP_APP_PASSWORD), json=payload)
         resp.raise_for_status()
-        post_id = resp.json().get("id")
-        logger.info("Posted job to WP: %s (id=%s)", title, post_id)
-        return post_id
+        pid = resp.json().get("id")
+        logger.info("Posted job to WP: %s (id=%s)", title, pid)
+        return pid
     except Exception as e:
-        logger.error("WP posting failed: %s", e)
+        logger.error("Failed to post job to WP: %s", e)
         return None
+
 
 # -------------------------
 # Simple AI classification (rules + keyword scoring)
@@ -437,6 +448,7 @@ ROLE_KEYWORDS = {
     "qa": ["qa", "quality assurance", "tester", "automation"]
 }
 
+
 def classify_job(title: str, description: str) -> Dict:
     txt = (" ".join([title or "", description or ""])).lower()
     seniority = "unspecified"
@@ -450,7 +462,6 @@ def classify_job(title: str, description: str) -> Dict:
             role = r
             break
     remote = "remote" if "remote" in txt or "work from home" in txt else "onsite"
-    # collect top skills by keyword matches
     skills = []
     for r, kws in ROLE_KEYWORDS.items():
         for k in kws:
@@ -458,17 +469,19 @@ def classify_job(title: str, description: str) -> Dict:
                 skills.append(k)
     return {"seniority": seniority, "role": role, "work_type": remote, "skills": skills[:6]}
 
+
 # -------------------------
 # Main orchestration
 # -------------------------
 def pick_continent_by_weekday(continents: List[Dict]) -> Optional[str]:
     weekday = datetime.utcnow().weekday()  # Monday=0
-    mapping = {0:"asia",1:"europe",2:"north_america",3:"south_america",4:"africa",5:"oceania",6:"antarctica"}
+    mapping = {0: "asia", 1: "europe", 2: "north_america", 3: "south_america", 4: "africa", 5: "oceania", 6: "antarctica"}
     target = mapping.get(weekday)
     for c in continents:
         if c.get("id") == target:
             return target
     return continents[0].get("id") if continents else None
+
 
 def main():
     config = load_config()
@@ -486,9 +499,12 @@ def main():
     # PROCESS_CONTINENT env filter
     if PROCESS_CONTINENT:
         continents = [c for c in continents if c.get("id") == PROCESS_CONTINENT]
+        if not continents:
+            logger.warning("PROCESS_CONTINENT set but no matching continent found: %s", PROCESS_CONTINENT)
+            return
 
     # AUTO_ROTATE if enabled in env or config
-    auto_rotate_cfg = config.get("global", {}).get("auto_rotate", True) if config.get("global") else True
+    auto_rotate_cfg = global_cfg.get("auto_rotate", True)
     if AUTO_ROTATE_ENV or auto_rotate_cfg:
         pick = pick_continent_by_weekday(continents)
         if pick:
@@ -505,9 +521,9 @@ def main():
         for country in cont.get("countries", []):
             country_code = country.get("code")
             country_name = country.get("name")
-            for loc in country.get("locales", []):
-                city = loc.get("city")
-                query = loc.get("query")
+            for locale in country.get("locales", []):
+                city = locale.get("city")
+                query = locale.get("query")
                 qtext = " ".join([s for s in [query, city, country_name] if s]).strip()
                 logger.info("Searching: %s", qtext)
 
@@ -545,7 +561,7 @@ def main():
                                         if href:
                                             candidates.append({"id": None, "title": title, "company": "", "location": city, "description": "", "url": requests.compat.urljoin(url, href)})
                                 except Exception as e:
-                                    logger.debug("HTML source failed: %s", e)
+                                    logger.debug("HTML source parse failed: %s", e)
                         else:
                             logger.debug("Unknown source type: %s", stype)
                     except Exception as e:
@@ -564,7 +580,6 @@ def main():
 
                     # AI classify for tags
                     cls = classify_job(job.get("title") or "", job.get("description") or "")
-                    # attach classification metadata
                     job["_classification"] = cls
 
                     # logo
@@ -574,7 +589,7 @@ def main():
                     if logo_bytes:
                         try:
                             img = Image.open(BytesIO(logo_bytes))
-                            img.thumbnail((600,600))
+                            img.thumbnail((600, 600))
                             out = BytesIO()
                             fmt = img.format or "PNG"
                             img.save(out, format=fmt)
@@ -588,7 +603,8 @@ def main():
                     # augment posting tags with classification
                     posting_tags = posting_cfg.get("tags", [])[:] if posting_cfg else []
                     posting_tags += [f"role:{cls.get('role')}", f"seniority:{cls.get('seniority')}", cls.get("work_type")]
-                    posting_cfg["tags"] = posting_tags
+                    if posting_cfg is not None:
+                        posting_cfg["tags"] = posting_tags
 
                     post_id = post_to_wp(job, cont_id, country_code, posting_cfg)
                     if post_id:
@@ -612,6 +628,7 @@ def main():
         save_dedup(dedup)
         logger.info("Saved dedup list (%d entries)", len(dedup))
     logger.info("Run complete: new posts=%d", total_new)
+
 
 if __name__ == "__main__":
     main()
