@@ -608,11 +608,11 @@ def main():
                             candidates += query_remotive(qtext, limit=src.get("limit", 50))
                         elif stype == "remoteok":
                             candidates += query_remoteok(qtext, limit=src.get("limit", 80))
-                                                    elif stype == "arbeitnow":
+                                                elif stype == "arbeitnow":
                                 candidates += query_arbeitnow(qtext, limit=src.get("limit", 50))
-                        elif stype == "jobicy":
+elif                          stype == "jobicy":
                                 candidates += query_jobicy(qtext, limit=src.get("limit", 50))
-                        elif stype == "himalayas":
+elif                          stype == "himalayas":
                                 candidates += query_himalayas(qtext, limit=src.get("limit", 40))
                         elif stype == "weworkremotely":
                             candidates += parse_weworkremotely(qtext, limit=src.get("limit", 30))
