@@ -19,15 +19,15 @@ sources:
     limit: 80
     
   - type: arbeitnow
-    enabled: true
+    enabled: false
     limit: 50
 
   - type: jobicy
-    enabled: true
+    enabled: false
     limit: 50
 
   - type: himalayas
-    enabled: true
+    enabled: false
     limit: 40
 
   - type: weworkremotely
