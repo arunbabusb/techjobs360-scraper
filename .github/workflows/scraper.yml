@@ -8,8 +8,7 @@ on:
     branches: ["main"]
   workflow_dispatch:
   schedule:
-    - cron: '30 0 * * *'  # 06:00 IST daily (00:30 UTC)
-
+      - cron: '30 0,6,12,18 * * *'  # Every 6 hours: 6AM, 12PM, 6PM, 12AM IST
 jobs:
   scrape:
     runs-on: ubuntu-latest
