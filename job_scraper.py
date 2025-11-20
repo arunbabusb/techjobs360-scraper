@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """
-TechJobs360 Combined Global Job Scraper (final)
+TechJobs360 Combined Global Job Scraper (fixed & formatted)
 
 Features:
-- Keeps RapidAPI JSearch (if configured)
-- Adds free sources: Remotive, RemoteOK, WeWorkRemotely
-- Adds Indeed (HTML) and LinkedIn (HTML) scrapers (disabled by default)
-- Dedup (legacy + modern), pruning, saved to posted_jobs.json
-- Logo fetch via Clearbit + WP media upload
-- Posts to WordPress via REST API (App Password)
-- Auto-rotate continents by weekday (enabled by config)
-- Simple AI classification: role, seniority, remote/onsite, skills (keyword rules)
-- Per-source pacing, backoff, robust logging
-- Config-driven via config.yaml
+- RapidAPI JSearch (if JSEARCH_API_KEY is provided and source enabled)
+- Free sources: Remotive, RemoteOK, WeWorkRemotely
+- Optional: Indeed / LinkedIn HTML scrapers (disabled by default in config.yaml)
+- Dedup (legacy list of hashes or list of dicts), pruning, and saving to posted_jobs.json
+- Clearbit logo fetch + WP media upload
+- Posts jobs to WordPress via REST API (App Password)
+- Simple keyword-based classification (role, seniority, remote/onsite)
+- Polite rate-limiting, retries, and robust error handling
+- Config driven via config.yaml (continents, sources, posting, dedup)
 """
 
 import os
@@ -26,8 +25,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import requests
 import yaml
-from slugify import slugify
 from bs4 import BeautifulSoup
+from slugify import slugify
 from PIL import Image
 from io import BytesIO
 from datetime import datetime, timedelta
@@ -52,7 +51,6 @@ USER_AGENT = "TechJobs360Scraper-final (+https://techjobs360.com)"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("techjobs360")
 
-
 # -------------------------
 # Helpers: config & dedup
 # -------------------------
@@ -62,7 +60,6 @@ def load_config() -> Dict:
         sys.exit(1)
     with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
         return yaml.safe_load(fh) or {}
-
 
 def load_dedup() -> List[Dict]:
     if not DEDUP_PATH.exists():
@@ -91,28 +88,29 @@ def load_dedup() -> List[Dict]:
                     "url": item.get("url"),
                     "first_seen": int(item.get("first_seen") or 0)
                 })
+            else:
+                logger.debug("Skipping unknown dedup item type: %r", item)
     else:
-        logger.warning("Unexpected dedup format; using empty list")
+        logger.warning("Unexpected dedup file format; expected list.")
     return normalized
-
 
 def save_dedup(entries: List[Dict]):
     try:
         with open(DEDUP_PATH, "w", encoding="utf-8") as fh:
             json.dump(entries, fh, indent=2, ensure_ascii=False)
     except Exception as e:
-        logger.warning("Failed to save dedup file: %s", e)
+        logger.warning("Failed saving dedup file: %s", e)
 
-
-def prune_dedup(dedup: List[Dict], max_age_days: int) -> List[Dict]:
+def prune_dedup(dedup_list: List[Dict], max_age_days: int) -> List[Dict]:
     if not max_age_days:
-        return dedup
+        return dedup_list
     cutoff = int((datetime.utcnow() - timedelta(days=max_age_days)).timestamp())
     kept = []
     removed = 0
-    for e in dedup:
+    for e in dedup_list:
         try:
-            if int(e.get("first_seen", 0) or 0) >= cutoff:
+            fs = int(e.get("first_seen", 0) or 0)
+            if fs >= cutoff:
                 kept.append(e)
             else:
                 removed += 1
@@ -121,7 +119,6 @@ def prune_dedup(dedup: List[Dict], max_age_days: int) -> List[Dict]:
     if removed:
         logger.info("Pruned %d old dedup entries", removed)
     return kept
-
 
 # -------------------------
 # HTTP with retries/backoff
@@ -136,13 +133,12 @@ def http_request(method: str, url: str, **kwargs) -> requests.Response:
                 headers["User-Agent"] = USER_AGENT
             return requests.request(method, url, timeout=REQUESTS_TIMEOUT, headers=headers, **kwargs)
         except Exception as e:
-            logger.debug("HTTP error %s %s (attempt %d/%d): %s", method, url, attempt, attempts, e)
+            logger.debug("HTTP %s %s failed (%d/%d): %s", method, url, attempt, attempts, e)
             if attempt == attempts:
                 raise
             time.sleep(delay + random.random())
             delay *= 2
     raise RuntimeError("unreachable")
-
 
 # -------------------------
 # RapidAPI JSearch (kept)
@@ -151,6 +147,7 @@ def query_jsearch(query: str, location: Optional[str] = None, per_page: int = 20
     if not JSEARCH_API_KEY:
         logger.debug("No JSEARCH_API_KEY set; skipping jsearch")
         return []
+
     url = "https://jsearch.p.rapidapi.com/search"
     headers = {
         "X-RapidAPI-Key": JSEARCH_API_KEY,
@@ -158,10 +155,11 @@ def query_jsearch(query: str, location: Optional[str] = None, per_page: int = 20
         "Accept": "application/json"
     }
     params = {"query": query or "", "location": location or "", "page": 1, "num_pages": 1}
+
     try:
         resp = http_request("GET", url, headers=headers, params=params)
         if resp.status_code != 200:
-            logger.warning("JSearch Error %s -> %s", resp.status_code, (resp.text or "")[:300])
+            logger.warning("JSearch returned %s for %r/%r: %s", resp.status_code, query, location, (resp.text or "")[:300])
             return []
         data = resp.json()
         jobs = []
@@ -177,12 +175,11 @@ def query_jsearch(query: str, location: Optional[str] = None, per_page: int = 20
             })
         return jobs
     except Exception as e:
-        logger.warning("JSearch exception: %s", e)
+        logger.warning("JSearch request exception for %r/%r: %s", query, location, e)
         return []
 
-
 # -------------------------
-# Free APIs: Remotive, RemoteOK
+# Remotive (free JSON)
 # -------------------------
 def query_remotive(query: str, limit: int = 50) -> List[Dict]:
     try:
@@ -190,7 +187,7 @@ def query_remotive(query: str, limit: int = 50) -> List[Dict]:
         params = {"search": query or ""}
         resp = http_request("GET", url, params=params)
         if resp.status_code != 200:
-            logger.debug("Remotive returned %s", resp.status_code)
+            logger.debug("Remotive returned %s for %r", resp.status_code, query)
             return []
         data = resp.json()
         jobs = []
@@ -206,10 +203,12 @@ def query_remotive(query: str, limit: int = 50) -> List[Dict]:
             })
         return jobs
     except Exception as e:
-        logger.warning("Remotive error: %s", e)
+        logger.warning("Remotive query failed for %r: %s", query, e)
         return []
 
-
+# -------------------------
+# RemoteOK (free JSON)
+# -------------------------
 def query_remoteok(query: str, limit: int = 80) -> List[Dict]:
     try:
         url = "https://remoteok.com/api"
@@ -243,9 +242,8 @@ def query_remoteok(query: str, limit: int = 80) -> List[Dict]:
                 break
         return jobs
     except Exception as e:
-        logger.warning("RemoteOK error: %s", e)
+        logger.warning("RemoteOK query failed: %s", e)
         return []
-
 
 # -------------------------
 # WeWorkRemotely HTML parse
@@ -255,7 +253,7 @@ def parse_weworkremotely(query: str, limit: int = 30) -> List[Dict]:
         url = f"https://weworkremotely.com/remote-jobs/search?term={requests.utils.quote(query or '')}"
         resp = http_request("GET", url)
         if resp.status_code != 200:
-            logger.debug("WeWorkRemotely returned %s", resp.status_code)
+            logger.debug("WeWorkRemotely returned %s for %r", resp.status_code, query)
             return []
         soup = BeautifulSoup(resp.text, "html.parser")
         jobs = []
@@ -279,9 +277,8 @@ def parse_weworkremotely(query: str, limit: int = 30) -> List[Dict]:
             })
         return jobs
     except Exception as e:
-        logger.warning("WeWorkRemotely parse failed: %s", e)
+        logger.warning("WeWorkRemotely parse failed for %r: %s", query, e)
         return []
-
 
 # -------------------------
 # Indeed HTML parse (careful)
@@ -318,9 +315,8 @@ def parse_indeed(query: str, city: Optional[str] = None, limit: int = 20) -> Lis
         logger.warning("Indeed parse failed: %s", e)
         return []
 
-
 # -------------------------
-# LinkedIn HTML parse (BEST EFFORT; often requires login)
+# LinkedIn HTML parse (BEST EFFORT)
 # -------------------------
 def parse_linkedin(query: str, location: Optional[str] = None, limit: int = 15) -> List[Dict]:
     try:
@@ -352,9 +348,8 @@ def parse_linkedin(query: str, location: Optional[str] = None, limit: int = 15) 
         logger.warning("LinkedIn parse failed: %s", e)
         return []
 
-
 # -------------------------
-# Logo fetch + WP upload
+# Logo fetch & WP media
 # -------------------------
 def fetch_logo(domain: str) -> Optional[bytes]:
     if not domain:
@@ -368,7 +363,6 @@ def fetch_logo(domain: str) -> Optional[bytes]:
         pass
     return None
 
-
 def upload_media_to_wp(image_bytes: bytes, filename: str) -> Optional[int]:
     if not (WP_URL and WP_USERNAME and WP_APP_PASSWORD):
         return None
@@ -381,7 +375,6 @@ def upload_media_to_wp(image_bytes: bytes, filename: str) -> Optional[int]:
     except Exception as e:
         logger.warning("WP media upload failed: %s", e)
         return None
-
 
 # -------------------------
 # Post to WordPress
@@ -403,7 +396,7 @@ def post_to_wp(job: Dict, continent_id: str, country_code: str, posting_cfg: Dic
         content += f'<p><strong>Apply:</strong> <a href="{apply_url}" target="_blank" rel="noopener">{apply_url}</a></p>'
     content += "<hr/>" + (job.get("description") or "")
 
-    tags = (posting_cfg.get("tags") or [])[:]
+    tags = posting_cfg.get("tags", []).copy() if posting_cfg else []
     tags.append(f"continent:{continent_id}")
     if country_code:
         tags.append(f"country:{country_code}")
@@ -412,7 +405,7 @@ def post_to_wp(job: Dict, continent_id: str, country_code: str, posting_cfg: Dic
         "title": title,
         "content": content,
         "slug": slug,
-        "status": posting_cfg.get("post_status", "draft"),
+        "status": posting_cfg.get("post_status", "draft") if posting_cfg else "draft",
         "tags": tags
     }
 
@@ -422,16 +415,13 @@ def post_to_wp(job: Dict, continent_id: str, country_code: str, posting_cfg: Dic
     try:
         resp = http_request("POST", endpoint, auth=(WP_USERNAME, WP_APP_PASSWORD), json=payload)
         resp.raise_for_status()
-        pid = resp.json().get("id")
-        logger.info("Posted job to WP: %s (id=%s)", title, pid)
-        return pid
+        return resp.json().get("id")
     except Exception as e:
         logger.error("Failed to post job to WP: %s", e)
         return None
 
-
 # -------------------------
-# Simple AI classification (rules + keyword scoring)
+# Simple AI classification
 # -------------------------
 SENIORITY_KEYWORDS = {
     "senior": ["senior", "lead", "principal", "sr.", "staff"],
@@ -447,7 +437,6 @@ ROLE_KEYWORDS = {
     "mobile": ["ios", "android", "mobile", "react native", "flutter"],
     "qa": ["qa", "quality assurance", "tester", "automation"]
 }
-
 
 def classify_job(title: str, description: str) -> Dict:
     txt = (" ".join([title or "", description or ""])).lower()
@@ -469,19 +458,17 @@ def classify_job(title: str, description: str) -> Dict:
                 skills.append(k)
     return {"seniority": seniority, "role": role, "work_type": remote, "skills": skills[:6]}
 
-
 # -------------------------
 # Main orchestration
 # -------------------------
 def pick_continent_by_weekday(continents: List[Dict]) -> Optional[str]:
-    weekday = datetime.utcnow().weekday()  # Monday=0
-    mapping = {0: "asia", 1: "europe", 2: "north_america", 3: "south_america", 4: "africa", 5: "oceania", 6: "antarctica"}
+    weekday = datetime.utcnow().weekday()
+    mapping = {0:"asia",1:"europe",2:"north_america",3:"south_america",4:"africa",5:"oceania",6:"antarctica"}
     target = mapping.get(weekday)
     for c in continents:
         if c.get("id") == target:
             return target
     return continents[0].get("id") if continents else None
-
 
 def main():
     config = load_config()
@@ -503,7 +490,7 @@ def main():
             logger.warning("PROCESS_CONTINENT set but no matching continent found: %s", PROCESS_CONTINENT)
             return
 
-    # AUTO_ROTATE if enabled in env or config
+    # AUTO_ROTATE
     auto_rotate_cfg = global_cfg.get("auto_rotate", True)
     if AUTO_ROTATE_ENV or auto_rotate_cfg:
         pick = pick_continent_by_weekday(continents)
@@ -521,68 +508,73 @@ def main():
         for country in cont.get("countries", []):
             country_code = country.get("code")
             country_name = country.get("name")
-            for locale in country.get("locales", []):
-                city = locale.get("city")
-                query = locale.get("query")
+            for loc in country.get("locales", []):
+                city = loc.get("city")
+                query = loc.get("query")
                 qtext = " ".join([s for s in [query, city, country_name] if s]).strip()
                 logger.info("Searching: %s", qtext)
 
-                candidates: List[Dict] = []
+                candidate_jobs: List[Dict] = []
 
+                # iterate over configured sources in order
                 for src in sources_cfg:
                     if not src.get("enabled", True):
                         continue
+
                     stype = src.get("type")
                     try:
                         if stype == "jsearch":
-                            candidates += query_jsearch(qtext, location=city or country_name, per_page=global_cfg.get("default_per_page", 20))
+                            candidate_jobs += query_jsearch(qtext, location=city or country_name, per_page=global_cfg.get("default_per_page", 20))
                         elif stype == "remotive":
-                            candidates += query_remotive(qtext, limit=src.get("limit", 50))
+                            candidate_jobs += query_remotive(qtext, limit=src.get("limit", 50))
                         elif stype == "remoteok":
-                            candidates += query_remoteok(qtext, limit=src.get("limit", 80))
+                            candidate_jobs += query_remoteok(qtext, limit=src.get("limit", 80))
                         elif stype == "weworkremotely":
-                            candidates += parse_weworkremotely(qtext, limit=src.get("limit", 30))
+                            candidate_jobs += parse_weworkremotely(qtext, limit=src.get("limit", 30))
                         elif stype == "indeed":
                             if src.get("enabled_html", False):
-                                candidates += parse_indeed(query or qtext, city, limit=src.get("limit", 20))
+                                candidate_jobs += parse_indeed(query or qtext, city, limit=src.get("limit", 20))
                         elif stype == "linkedin":
                             if src.get("enabled_html", False):
-                                candidates += parse_linkedin(query or qtext, city, limit=src.get("limit", 15))
+                                candidate_jobs += parse_linkedin(query or qtext, city, limit=src.get("limit", 15))
                         elif stype == "html":
                             endpoint = src.get("endpoint")
                             if endpoint:
-                                url = endpoint.format(query=requests.utils.quote(query or ""), city=requests.utils.quote(city or ""))
                                 try:
+                                    url = endpoint.format(query=requests.utils.quote(query or ""), city=requests.utils.quote(city or ""))
                                     resp = http_request("GET", url)
                                     soup = BeautifulSoup(resp.text, "html.parser")
                                     for a in soup.select("a")[:src.get("limit", 10)]:
                                         href = a.get("href")
+                                        if not href:
+                                            continue
                                         title = a.get_text(strip=True)
-                                        if href:
-                                            candidates.append({"id": None, "title": title, "company": "", "location": city, "description": "", "url": requests.compat.urljoin(url, href)})
+                                        candidate_jobs.append({"id": None, "title": title, "company": "", "location": city, "description": "", "url": requests.compat.urljoin(url, href)})
                                 except Exception as e:
                                     logger.debug("HTML source parse failed: %s", e)
                         else:
-                            logger.debug("Unknown source type: %s", stype)
+                            logger.debug("Unknown source type in config: %s", stype)
                     except Exception as e:
-                        logger.warning("Source %s error for %r: %s", stype, qtext, e)
+                        logger.warning("Source %s failed for query=%r: %s", stype, qtext, e)
 
+                    # polite pause per source
                     time.sleep(base_pause + random.random() * base_pause)
 
-                # dedupe by computed hash + post each new job
-                for job in candidates:
-                    key = str(job.get("id") or job.get("url") or (job.get("title") or "") + (job.get("company") or ""))
-                    if not key:
-                        continue
-                    jhash = hashlib.sha1(key.encode("utf-8")).hexdigest()
-                    if any(e.get("hash") == jhash for e in dedup):
+                # process results
+                for job in candidate_jobs:
+                    hkey = (job.get("id") or job.get("url") or job.get("title") or "")
+                    if not hkey:
                         continue
 
-                    # AI classify for tags
+                    jhash = hashlib.sha1(str(hkey).encode("utf-8")).hexdigest()
+                    if any(d.get("hash") == jhash for d in dedup):
+                        continue
+
+                    # AI classification
                     cls = classify_job(job.get("title") or "", job.get("description") or "")
                     job["_classification"] = cls
 
-                    # logo
+                    # Logo
                     raw = job.get("raw") or {}
                     domain = raw.get("company_domain") or raw.get("company_website") or (slugify(job.get("company") or "").replace("-", "") + ".com")
                     logo_bytes = fetch_logo(domain) if domain else None
@@ -593,21 +585,22 @@ def main():
                             out = BytesIO()
                             fmt = img.format or "PNG"
                             img.save(out, format=fmt)
-                            fname = f"{slugify(job.get('company') or 'company')}-{jhash[:8]}.{fmt.lower()}"
-                            media_id = upload_media_to_wp(out.getvalue(), fname)
+                            filename = f"{slugify(job.get('company') or 'company')}-{jhash[:8]}.{fmt.lower()}"
+                            media_id = upload_media_to_wp(out.getvalue(), filename)
                             if media_id:
                                 job["_featured_media_id"] = media_id
                         except Exception as e:
-                            logger.debug("Logo handling error: %s", e)
+                            logger.debug("Logo processing error: %s", e)
 
-                    # augment posting tags with classification
+                    # Merge posting tags with classification
                     posting_tags = posting_cfg.get("tags", [])[:] if posting_cfg else []
                     posting_tags += [f"role:{cls.get('role')}", f"seniority:{cls.get('seniority')}", cls.get("work_type")]
-                    if posting_cfg is not None:
-                        posting_cfg["tags"] = posting_tags
+                    posting_cfg["tags"] = posting_tags
 
+                    # Post to WP
                     post_id = post_to_wp(job, cont_id, country_code, posting_cfg)
                     if post_id:
+                        total_new += 1
                         dedup.append({
                             "hash": jhash,
                             "title": job.get("title"),
@@ -616,18 +609,20 @@ def main():
                             "url": job.get("url"),
                             "first_seen": int(time.time())
                         })
-                        total_new += 1
                     else:
-                        logger.debug("Posting failed; skipping dedup append for %s", job.get("title"))
+                        logger.debug("Posting failed; not adding to dedup: %s", job.get("title"))
 
-                # small pause
+                # pause between locales
                 time.sleep(base_pause + random.random() * base_pause)
 
-    # save dedup if changed
+    # persist dedup
     if len(dedup) != orig_len:
         save_dedup(dedup)
-        logger.info("Saved dedup list (%d entries)", len(dedup))
-    logger.info("Run complete: new posts=%d", total_new)
+        logger.info("Saved dedup file with %d entries.", len(dedup))
+    else:
+        logger.info("No changes to dedup file.")
+
+    logger.info("Run complete. New jobs posted: %d", total_new)
 
 
 if __name__ == "__main__":
