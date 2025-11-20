@@ -112,6 +112,18 @@ continents:
             query: full stack developer
           - city: Pune
             query: QA automation
+            - city: Delhi
+              query: backend engineer
+            - city: Noida
+              query: python developer
+            - city: Kolkata
+              query: data analyst
+            - city: Ahmedabad
+              query: react developer
+            - city: Gurgaon
+              query: nodejs developer
+            - city: Kochi
+              query: mobile app developer
           - city: Chennai
             query: cloud engineer
       - code: CN
@@ -153,6 +165,12 @@ continents:
             query: backend engineer
           - city: Manchester
             query: software engineer
+            - city: Birmingham
+              query: java developer
+            - city: Leeds
+              query: devops engineer
+            - city: Edinburgh
+              query: cloud engineer
       - code: DE
         name: Germany
         locales:
@@ -198,6 +216,18 @@ continents:
             query: software engineer
           - city: Boston
             query: data scientist
+            - city: Chicago
+              query: full stack developer
+            - city: Los Angeles
+              query: react developer
+            - city: Denver
+              query: python engineer
+            - city: Atlanta
+              query: cloud architect
+            - city: Portland
+              query: frontend engineer
+            - city: Miami
+              query: mobile developer
       - code: CA
         name: Canada
         locales:
