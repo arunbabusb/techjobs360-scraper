@@ -19,11 +19,11 @@ sources:
     limit: 80
     
   - type: arbeitnow
-    enabled: false
+    enabled: true
     limit: 50
 
   - type: jobicy
-    enabled: false
+    enabled: true
     limit: 50
 
   - type: himalayas
