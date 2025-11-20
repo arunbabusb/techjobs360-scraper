@@ -239,6 +239,90 @@ def query_remoteok(query: str, limit: int = 80) -> List[Dict]:
         logger.warning("RemoteOK error: %s", e)
         return []
 
+
+# -------------------------
+# Arbeitnow Free API
+# -------------------------
+def query_arbeitnow(query: str, limit: int = 50) -> List[Dict]:
+    try:
+        url = "https://www.arbeitnow.com/api/v2/jobs"
+        params = {"search": query or "", "page": 1}
+        resp = http_request("GET", url, params=params)
+        if resp.status_code != 200:
+            logger.debug("Arbeitnow returned %s", resp.status_code)
+            return []
+        data = resp.json()
+        jobs = []
+        for item in data.get("data", [])[:limit]:
+            jobs.append({
+                "id": item.get("id"),
+                "title": item.get("title"),
+                "company": item.get("company_name"),
+                "location": item.get("location"),
+                "description": item.get("description") or "",
+                "url": item.get("url"),
+                "raw": item
+            })
+        return jobs
+    except Exception as e:
+        logger.warning("Arbeitnow error: %s", e)
+        return []
+
+# -------------------------
+# Jobicy Free API
+# -------------------------
+def query_jobicy(query: str, limit: int = 50) -> List[Dict]:
+    try:
+        url = "https://jobicy.com/api/v2/remote-jobs"
+        params = {"search": query or "", "count": limit}
+        resp = http_request("GET", url, params=params)
+        if resp.status_code != 200:
+            logger.debug("Jobicy returned %s", resp.status_code)
+            return []
+        data = resp.json()
+        jobs = []
+        for item in data.get("jobs", [])[:limit]:
+            jobs.append({
+                "id": item.get("id"),
+                "title": item.get("title"),
+                "company": item.get("company_name"),
+                "location": item.get("locations") or "",
+                "description": item.get("description") or "",
+                "url": item.get("url"),
+                "raw": item
+            })
+        return jobs
+    except Exception as e:
+        logger.warning("Jobicy error: %s", e)
+        return []
+
+# -------------------------
+# Himalayas Free API
+# -------------------------
+def query_himalayas(query: str, limit: int = 40) -> List[Dict]:
+    try:
+        url = "https://api.himalayas.app/v1/jobs"
+        params = {"keyword": query or "", "limit": limit}
+        resp = http_request("GET", url, params=params)
+        if resp.status_code != 200:
+            logger.debug("Himalayas returned %s", resp.status_code)
+            return []
+        data = resp.json()
+        jobs = []
+        for item in data.get("jobs", [])[:limit]:
+            jobs.append({
+                "id": item.get("id"),
+                "title": item.get("title"),
+                "company": item.get("employer"),
+                "location": item.get("location") or "Remote",
+                "description": item.get("description") or "",
+                "url": item.get("url") or item.get("apply_url"),
+                "raw": item
+            })
+        return jobs
+    except Exception as e:
+        logger.warning("Himalayas error: %s", e)
+        return []
 # -------------------------
 # WeWorkRemotely HTML parse
 # -------------------------
@@ -524,6 +608,12 @@ def main():
                             candidates += query_remotive(qtext, limit=src.get("limit", 50))
                         elif stype == "remoteok":
                             candidates += query_remoteok(qtext, limit=src.get("limit", 80))
+                                                        elif stype == "arbeitnow":
+                                candidates += query_arbeitnow(qtext, limit=src.get("limit", 50))
+                            elif stype == "jobicy":
+                                candidates += query_jobicy(qtext, limit=src.get("limit", 50))
+                            elif stype == "himalayas":
+                                candidates += query_himalayas(qtext, limit=src.get("limit", 40))
                         elif stype == "weworkremotely":
                             candidates += parse_weworkremotely(qtext, limit=src.get("limit", 30))
                         elif stype == "indeed":
