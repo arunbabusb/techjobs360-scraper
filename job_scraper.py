@@ -4,8 +4,7 @@ TechJobs360 Combined Global Job Scraper (final)
 
 Features:
 - Keeps RapidAPI JSearch (if configured)
-- Adds free sources: Remotive, RemoteOK, WeWorkRemotely
-- Adds Indeed (HTML) and LinkedIn (HTML) scrapers (disabled by default)
+- Adds free sources: Remotive, RemoteOK, WeWorkRemotely, Arbeitnow, Jobicy- Adds Indeed (HTML) and LinkedIn (HTML) scrapers (disabled by default)
 - Dedup (legacy + modern), pruning, saved to posted_jobs.json
 - Logo fetch via Clearbit + WP media upload
 - Posts to WordPress via REST API (App Password)
@@ -276,6 +275,67 @@ def parse_weworkremotely(query: str, limit: int = 30) -> List[Dict]:
         return []
 
 # -------------------------
+# Arbeitnow FREE API
+# -------------------------
+def query_arbeitnow(query: str, limit: int = 50) -> List[Dict]:
+        try:
+                    url = "https://www.arbeitnow.com/api/job-board-api"
+                    resp = http_request("GET", url)
+                    if resp.status_code != 200:
+                                    logger.debug("Arbeitnow returned %s", resp.status_code)
+                                    return []
+                                data = resp.json()
+                    jobs = []
+                    qlow = (query or "").lower()
+                    for item in data.get("data", [])[:limit]:
+                                    title = item.get("title") or ""
+                                    company = item.get("company_name") or ""
+                                    combined = f"{title} {company}".lower()
+                                    if qlow and qlow not in combined:
+                                                        continue
+                                                    jobs.append({
+                                                        "id": item.get("slug"),
+                                                        "title": title,
+                                                        "company": company,
+                                                        "location": item.get("location") or "",
+                                                        "description": item.get("description") or "",
+                                                        "url": item.get("url") or "",
+                                                        "raw": item
+                                                    })
+                                return jobs
+                except Exception as e:
+        logger.warning("Arbeitnow error: %s", e)
+            return []
+
+# -------------------------
+# Jobicy FREE API
+# -------------------------
+def query_jobicy(query: str, limit: int = 50) -> List[Dict]:
+        try:
+                    url = "https://jobicy.com/api/v2/remote-jobs"
+                    params = {"count": limit, "tag": query or ""}
+                    resp = http_request("GET", url, params=params)
+                    if resp.status_code != 200:
+                                    logger.debug("Jobicy returned %s", resp.status_code)
+                                    return []
+                                data = resp.json()
+        jobs = []
+        for item in data.get("jobs", [])[:limit]:
+                        jobs.append({
+                                            "id": item.get("id"),
+                                            "title": item.get("jobTitle") or item.get("title"),
+                                            "company": item.get("companyName") or item.get("company"),
+                                            "location": item.get("jobGeo") or item.get("location") or "Remote",
+                                            "description": item.get("jobDescription") or item.get("description") or "",
+                                            "url": item.get("url") or "",
+                                            "raw": item
+                                        })
+                    return jobs
+    except Exception as e:
+        logger.warning("Jobicy error: %s", e)
+        return []
+
+# -------------------------
 # Indeed HTML parse (careful)
 # -------------------------
 def parse_indeed(query: str, city: Optional[str] = None, limit: int = 20) -> List[Dict]:
@@ -526,6 +586,10 @@ def main():
                             candidates += query_remoteok(qtext, limit=src.get("limit", 80))
                         elif stype == "weworkremotely":
                             candidates += parse_weworkremotely(qtext, limit=src.get("limit", 30))
+                                                elif stype == "arbeitnow":
+                                                                            candidates += query_arbeitnow(qtext, limit=src.get("limit", 50))
+                                                                        elif stype == "jobicy":
+                                                                                                    candidates += query_jobicy(qtext, limit=src.get("limit", 50))
                         elif stype == "indeed":
                             if src.get("enabled_html", False):
                                 candidates += parse_indeed(query or qtext, city, limit=src.get("limit", 20))
