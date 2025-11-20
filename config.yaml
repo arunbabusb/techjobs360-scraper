@@ -43,7 +43,7 @@ dedup:
 
 # POSTING
 posting:
-  post_status: draft   # switch to publish when tested
+  post_status: publish   # switch to publish when tested
   tags:
     - tech
     - jobs
