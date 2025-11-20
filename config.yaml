@@ -17,6 +17,18 @@ sources:
   - type: remoteok
     enabled: true
     limit: 80
+    
+  - type: arbeitnow
+    enabled: true
+    limit: 50
+
+  - type: jobicy
+    enabled: true
+    limit: 50
+
+  - type: himalayas
+    enabled: true
+    limit: 40
 
   - type: weworkremotely
     enabled: true
