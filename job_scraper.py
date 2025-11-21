@@ -4,8 +4,8 @@ TechJobs360 Combined Global Job Scraper (fixed & formatted)
 
 Features:
 - RapidAPI JSearch (if JSEARCH_API_KEY is provided and source enabled)
-- Free sources: Remotive, RemoteOK, WeWorkRemotely
-- Optional: Indeed / LinkedIn HTML scrapers (disabled by default in config.yaml)
+- Free sources: Remotive, RemoteOK, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely
+- Optional: Indeed / LinkedIn HTML scrapers (enabled_html: false by default in config.yaml)
 - Dedup (legacy list of hashes or list of dicts), pruning, and saving to posted_jobs.json
 - Clearbit logo fetch + WP media upload
 - Posts jobs to WordPress via REST API (App Password)
@@ -281,6 +281,106 @@ def parse_weworkremotely(query: str, limit: int = 30) -> List[Dict]:
         return []
 
 # -------------------------
+# Arbeitnow (free JSON)
+# -------------------------
+def query_arbeitnow(query: str, limit: int = 50) -> List[Dict]:
+    try:
+        url = "https://www.arbeitnow.com/api/job-board-api"
+        resp = http_request("GET", url)
+        if resp.status_code != 200:
+            logger.debug("Arbeitnow returned %s", resp.status_code)
+            return []
+        data = resp.json()
+        jobs = []
+        qlow = (query or "").lower()
+        for item in data.get("data", [])[:limit]:
+            title = item.get("title") or ""
+            company = item.get("company_name") or ""
+            desc = item.get("description") or ""
+            combined = f"{title} {company} {desc}".lower()
+            if qlow and qlow not in combined:
+                continue
+            jobs.append({
+                "id": item.get("slug"),
+                "title": title,
+                "company": company,
+                "location": item.get("location") or "Remote",
+                "description": desc,
+                "url": item.get("url") or f"https://www.arbeitnow.com/view/{item.get('slug')}",
+                "raw": item
+            })
+            if len(jobs) >= limit:
+                break
+        return jobs
+    except Exception as e:
+        logger.warning("Arbeitnow query failed for %r: %s", query, e)
+        return []
+
+# -------------------------
+# Jobicy (free JSON API)
+# -------------------------
+def query_jobicy(query: str, limit: int = 50) -> List[Dict]:
+    try:
+        url = "https://jobicy.com/api/v2/remote-jobs"
+        params = {"count": min(limit, 100), "tag": query or ""}
+        resp = http_request("GET", url, params=params)
+        if resp.status_code != 200:
+            logger.debug("Jobicy returned %s for %r", resp.status_code, query)
+            return []
+        data = resp.json()
+        jobs = []
+        for item in data.get("jobs", [])[:limit]:
+            jobs.append({
+                "id": item.get("id"),
+                "title": item.get("jobTitle") or item.get("title"),
+                "company": item.get("companyName") or item.get("company"),
+                "location": item.get("jobGeo") or item.get("location") or "Remote",
+                "description": item.get("jobExcerpt") or item.get("description") or "",
+                "url": item.get("url") or item.get("jobUrl"),
+                "raw": item
+            })
+        return jobs
+    except Exception as e:
+        logger.warning("Jobicy query failed for %r: %s", query, e)
+        return []
+
+# -------------------------
+# Himalayas (free JSON API)
+# -------------------------
+def query_himalayas(query: str, limit: int = 40) -> List[Dict]:
+    try:
+        url = "https://himalayas.app/jobs/api"
+        params = {"limit": min(limit, 20)}  # API max is 20 per request
+        resp = http_request("GET", url, params=params)
+        if resp.status_code != 200:
+            logger.debug("Himalayas returned %s", resp.status_code)
+            return []
+        data = resp.json()
+        jobs_list = data if isinstance(data, list) else data.get("jobs", [])
+        qlow = (query or "").lower()
+        jobs = []
+        for item in jobs_list[:limit]:
+            title = item.get("title") or ""
+            company = item.get("company", {}).get("name", "") if isinstance(item.get("company"), dict) else item.get("companyName", "")
+            desc = item.get("description") or ""
+            combined = f"{title} {company} {desc}".lower()
+            if qlow and qlow not in combined:
+                continue
+            jobs.append({
+                "id": item.get("id"),
+                "title": title,
+                "company": company,
+                "location": item.get("location") or "Remote",
+                "description": desc,
+                "url": item.get("url") or f"https://himalayas.app/jobs/{item.get('id')}",
+                "raw": item
+            })
+        return jobs
+    except Exception as e:
+        logger.warning("Himalayas query failed for %r: %s", query, e)
+        return []
+
+# -------------------------
 # Indeed HTML parse (careful)
 # -------------------------
 def parse_indeed(query: str, city: Optional[str] = None, limit: int = 20) -> List[Dict]:
@@ -529,6 +629,12 @@ def main():
                             candidate_jobs += query_remotive(qtext, limit=src.get("limit", 50))
                         elif stype == "remoteok":
                             candidate_jobs += query_remoteok(qtext, limit=src.get("limit", 80))
+                        elif stype == "arbeitnow":
+                            candidate_jobs += query_arbeitnow(qtext, limit=src.get("limit", 50))
+                        elif stype == "jobicy":
+                            candidate_jobs += query_jobicy(qtext, limit=src.get("limit", 50))
+                        elif stype == "himalayas":
+                            candidate_jobs += query_himalayas(qtext, limit=src.get("limit", 40))
                         elif stype == "weworkremotely":
                             candidate_jobs += parse_weworkremotely(qtext, limit=src.get("limit", 30))
                         elif stype == "indeed":
@@ -553,7 +659,7 @@ def main():
                                 except Exception as e:
                                     logger.debug("HTML source parse failed: %s", e)
                         else:
-                            logger.debug("Unknown source type in config: %s", stype)
+                            logger.warning("Source '%s' is not implemented. Available: jsearch, remotive, remoteok, arbeitnow, jobicy, himalayas, weworkremotely, indeed, linkedin, html", stype)
                     except Exception as e:
                         logger.warning("Source %s failed for query=%r: %s", stype, qtext, e)
 

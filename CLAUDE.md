@@ -1,7 +1,7 @@
 # CLAUDE.md - AI Assistant Guide for TechJobs360 Scraper
 
 > **Last Updated**: 2025-11-21
-> **Project Version**: v2.0 (Multi-source scraper with WordPress integration)
+> **Project Version**: v2.1 (Multi-source scraper with WordPress integration - ALL sources implemented)
 
 ## 📋 Table of Contents
 
@@ -60,17 +60,17 @@ techjobs360-scraper/
 
 ### Key Files Explained
 
-#### `job_scraper.py` (Lines: 1-630)
+#### `job_scraper.py` (Lines: 1-730)
 The monolithic main application containing:
 - **Lines 1-33**: Imports and module docstring
 - **Lines 34-52**: Environment variables and global configuration
 - **Lines 57-122**: Config and deduplication helpers
 - **Lines 126-141**: HTTP request wrapper with retry logic
-- **Lines 145-349**: Job source functions (JSearch, Remotive, RemoteOK, WeWorkRemotely, Indeed, LinkedIn)
-- **Lines 354-377**: Logo fetching and WordPress media upload
-- **Lines 382-421**: WordPress post creation
-- **Lines 426-459**: Simple keyword-based job classification
-- **Lines 464-629**: Main orchestration logic
+- **Lines 145-381**: Job source functions (JSearch, Remotive, RemoteOK, WeWorkRemotely, Arbeitnow, Jobicy, Himalayas, Indeed, LinkedIn)
+- **Lines 454-477**: Logo fetching and WordPress media upload
+- **Lines 482-521**: WordPress post creation
+- **Lines 526-559**: Simple keyword-based job classification
+- **Lines 564-729**: Main orchestration logic
 
 #### `config.yaml` (Lines: 1-287)
 YAML configuration with:
@@ -155,13 +155,14 @@ JSON array storing deduplicated jobs with structure:
 
 Sources are queried in order defined in `config.yaml`:
 1. **jsearch** - RapidAPI JSearch (paid, requires API key)
-2. **remotive** - Free JSON API
-3. **remoteok** - Free JSON API
-4. **arbeitnow** - Free (mentioned in config)
-5. **jobicy** - Free (mentioned in config)
-6. **weworkremotely** - HTML scraping
-7. **indeed** - HTML scraping (disabled by default)
-8. **linkedin** - HTML scraping (disabled by default)
+2. **remotive** - Free JSON API (https://remotive.com/api/remote-jobs)
+3. **remoteok** - Free JSON API (https://remoteok.com/api)
+4. **arbeitnow** - Free JSON API (https://www.arbeitnow.com/api/job-board-api)
+5. **jobicy** - Free JSON API (https://jobicy.com/api/v2/remote-jobs)
+6. **himalayas** - Free JSON API (https://himalayas.app/jobs/api)
+7. **weworkremotely** - HTML scraping (https://weworkremotely.com)
+8. **indeed** - HTML scraping (disabled by default, enabled_html: false)
+9. **linkedin** - HTML scraping (disabled by default, enabled_html: false)
 
 ---
 
@@ -202,14 +203,35 @@ Sources are queried in order defined in `config.yaml`:
 - **Method**: HTML parsing (BeautifulSoup)
 - **Selectors**: `section.jobs article a`, `.title`, `.company`
 
+#### Arbeitnow (`query_arbeitnow`)
+**Location**: job_scraper.py:284-317
+- **Endpoint**: `https://www.arbeitnow.com/api/job-board-api`
+- **Free**: Yes, no auth required
+- **Filtering**: Client-side by query string
+- **Features**: Jobs from Europe/Remote, visa sponsorship info
+
+#### Jobicy (`query_jobicy`)
+**Location**: job_scraper.py:320-345
+- **Endpoint**: `https://jobicy.com/api/v2/remote-jobs`
+- **Free**: Yes, no auth required
+- **Parameters**: count (max 100), tag (search term)
+- **Features**: 50k+ remote jobs, attribution required
+
+#### Himalayas (`query_himalayas`)
+**Location**: job_scraper.py:348-381
+- **Endpoint**: `https://himalayas.app/jobs/api`
+- **Free**: Yes, no auth required
+- **Limit**: 20 jobs per request (API max)
+- **Features**: Remote jobs, location restrictions, employment types
+
 #### Indeed/LinkedIn Parsers
-**Location**: job_scraper.py:286-349
+**Location**: job_scraper.py:384-449
 - **Status**: Disabled by default (`enabled_html: false`)
 - **Risk**: May violate ToS, require login, or get rate-limited
 - **Use**: Only enable for testing or with proper authorization
 
 ### 3. Logo Fetching (`fetch_logo`)
-**Location**: job_scraper.py:354-364
+**Location**: job_scraper.py:454-464
 
 - **Service**: Clearbit Logo API (`https://logo.clearbit.com/{domain}`)
 - **Free tier**: 100 requests/month per domain
@@ -218,24 +240,24 @@ Sources are queried in order defined in `config.yaml`:
 ### 4. WordPress Integration
 
 #### Media Upload (`upload_media_to_wp`)
-**Location**: job_scraper.py:366-377
+**Location**: job_scraper.py:466-477
 - **Endpoint**: `/wp-json/wp/v2/media`
 - **Auth**: HTTP Basic (username + app password)
 - **Format**: Multipart upload with Content-Disposition header
 
 #### Post Creation (`post_to_wp`)
-**Location**: job_scraper.py:382-421
+**Location**: job_scraper.py:482-521
 - **Endpoint**: `/wp-json/wp/v2/posts`
 - **Status**: Configurable (`publish` or `draft`)
 - **Slug**: Auto-generated from title + company + location (max 200 chars)
 - **Tags**: Includes continent, country, role, seniority, work_type
 
 ### 5. Job Classification (`classify_job`)
-**Location**: job_scraper.py:441-459
+**Location**: job_scraper.py:541-559
 
 Simple keyword matching for:
-- **Seniority**: senior, mid, junior (based on keywords in job_scraper.py:426-429)
-- **Role**: backend, frontend, fullstack, data, devops, mobile, qa (job_scraper.py:431-438)
+- **Seniority**: senior, mid, junior (based on keywords in job_scraper.py:526-529)
+- **Role**: backend, frontend, fullstack, data, devops, mobile, qa (job_scraper.py:531-538)
 - **Work Type**: remote or onsite
 - **Skills**: Extracted from keyword matches (max 6)
 
@@ -277,9 +299,15 @@ pruned = prune_dedup(dedup, max_age_days=30)
 print(f"Pruned {len(dedup) - len(pruned)} entries")
 
 # Test a specific source
-from job_scraper import query_remotive
+from job_scraper import query_remotive, query_arbeitnow, query_jobicy, query_himalayas
 jobs = query_remotive("python developer", limit=10)
 print(f"Found {len(jobs)} jobs from Remotive")
+
+jobs = query_arbeitnow("backend engineer", limit=10)
+print(f"Found {len(jobs)} jobs from Arbeitnow")
+
+jobs = query_jobicy("react", limit=10)
+print(f"Found {len(jobs)} jobs from Jobicy")
 
 # Test classification
 from job_scraper import classify_job
@@ -528,6 +556,12 @@ sources:
   - type: remotive
     enabled: false
   - type: remoteok
+    enabled: false
+  - type: arbeitnow
+    enabled: false
+  - type: jobicy
+    enabled: false
+  - type: himalayas
     enabled: false
   - type: weworkremotely
     enabled: false
@@ -846,3 +880,13 @@ For issues related to this codebase:
 **End of CLAUDE.md**
 
 *This document is maintained by AI assistants and human developers. Last reviewed: 2025-11-21*
+
+---
+
+## 📝 Changelog
+
+### v2.1 (2025-11-21)
+- ✅ Implemented missing job sources: Arbeitnow, Jobicy, Himalayas
+- ✅ Fixed silent failure logging for unknown sources (now shows WARNING)
+- ✅ Updated documentation to match actual implementation
+- ✅ All 9 job sources now fully functional

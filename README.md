@@ -1,7 +1,7 @@
 # TechJobs360 Scraper
 
 ## Overview
-Automated Python scraper for posting tech jobs (from JSearch API) to a WordPress job board (WP Job Manager).
+Automated Python scraper for posting tech jobs from **9 different sources** (including JSearch API and 6 free APIs) to a WordPress job board (WP Job Manager).
 
 ### JSearch API Endpoints
 
@@ -27,13 +27,27 @@ This scraper utilizes **ALL 4 JSearch API endpoints** for comprehensive job data
    - More accurate than general salary estimates
    - Helps candidates understand company compensation
 
+### All Job Sources (9 Total)
+
+1. **JSearch** (RapidAPI) - Paid API with 4 endpoints
+2. **Remotive** - Free remote jobs API
+3. **RemoteOK** - Free remote jobs API
+4. **Arbeitnow** - Free jobs API (Europe/Remote)
+5. **Jobicy** - Free remote jobs API (50k+ listings)
+6. **Himalayas** - Free remote jobs API
+7. **WeWorkRemotely** - HTML scraping
+8. **Indeed** - HTML scraping (optional, disabled by default)
+9. **LinkedIn** - HTML scraping (optional, disabled by default)
+
 ### Enhanced Features
 
+✅ **Multi-Source Integration** - Collects jobs from 9 different sources automatically
 ✅ **Multi-Endpoint Integration** - Enriches each job with data from multiple API calls
 ✅ **Salary Information** - Automatically adds salary ranges to job listings
 ✅ **Job Highlights** - Displays key job requirements and benefits
 ✅ **Smart Rate Limiting** - Prevents API throttling with intelligent delays
 ✅ **Error Handling** - Gracefully handles API failures and continues scraping
+✅ **Intelligent Classification** - Auto-categorizes jobs by role, seniority, and work type
 
 ## Scraping Policy and Compliance Steps
 - **Privacy**: Only public job info is processed—title, company, location, logo, description, source, expiry. No personal or sensitive data is ever collected/posted.
