@@ -1,0 +1,5 @@
+build:
+  languages:
+    - python
+run:
+  worker: python job_scraper.py
