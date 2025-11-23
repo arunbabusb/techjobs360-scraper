@@ -1,0 +1,74 @@
+# QUIC.cloud Support Request - URGENT
+
+**To:** QUIC.cloud Support (https://www.quic.cloud/support/)
+**Subject:** URGENT: Site Down - SSL Certificate Error (503)
+
+---
+
+## Account Information
+
+**Email:** chessgenius900@gmail.com
+**Domain:** techjobs360.com
+**Issue:** Site completely down with 503 errors
+
+---
+
+## Problem Description
+
+My website techjobs360.com has been down for several days with continuous 503 Service Unavailable errors.
+
+**Technical Details:**
+- Error: `upstream connect error or disconnect/reset before headers`
+- SSL Error: `BAD_ECC_CERT` (TLS error)
+- QUIC.cloud CDN cannot connect to origin server due to SSL certificate mismatch
+
+---
+
+## What I Need
+
+**URGENT: Please make these changes to my techjobs360.com CDN configuration:**
+
+1. **Change SSL mode to "Flexible SSL"** (or "HTTP to Origin")
+   - Current setting is probably "End-to-end HTTPS" or "Full SSL Strict"
+   - This is blocking connection due to invalid certificate on origin
+   - Need to bypass SSL verification temporarily
+
+2. **Purge all cached content**
+   - Clear any cached 503 errors
+   - Flush all CDN cache for techjobs360.com
+
+3. **Verify origin server connectivity**
+   - Check if origin server IP is correct
+   - Verify origin is responding
+
+---
+
+## Impact
+
+- Website completely inaccessible
+- Business operations halted
+- Automated job posting system offline for days
+- Critical business need - losing revenue daily
+
+---
+
+## Urgency Level
+
+**CRITICAL** - Site has been down for multiple days. Need immediate assistance.
+
+---
+
+## Temporary Workaround Request
+
+If SSL configuration cannot be changed immediately, please temporarily:
+- Disable CDN proxy (DNS only mode)
+- OR bypass SSL verification
+- So site becomes accessible while proper fix is implemented
+
+---
+
+## Contact
+
+Please respond ASAP. I am available immediately for any troubleshooting.
+
+Thank you for urgent assistance.
