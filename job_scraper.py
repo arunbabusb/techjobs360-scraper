@@ -51,6 +51,12 @@ USER_AGENT = "TechJobs360Scraper-final (+https://techjobs360.com)"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("techjobs360")
 
+# Validate WP_URL has proper scheme
+if WP_URL and not (WP_URL.startswith("http://") or WP_URL.startswith("https://")):
+    logger.warning("WP_URL is set but missing http:// or https:// scheme. Current value: %s", WP_URL)
+    logger.warning("WordPress posting will be disabled. Please set WP_URL to a valid URL like https://techjobs360.com")
+    WP_URL = None  # Disable WordPress posting if URL is invalid
+
 # -------------------------
 # Helpers: config & dedup
 # -------------------------
