@@ -286,6 +286,101 @@ def parse_weworkremotely(query: str, limit: int = 30) -> List[Dict]:
         logger.warning("WeWorkRemotely parse failed for %r: %s", query, e)
         return []
 
+
+# ---------------------------
+# Arbeitnow (free JSON API)
+# ---------------------------
+def query_arbeitnow(query: str, limit: int = 50) -> List[Dict]:
+    try:
+        url = "https://arbeitnow.com/api/job-board-api"
+        resp = http_request("GET", url)
+        if resp.status_code != 200:
+            logger.debug("Arbeitnow returned %s", resp.status_code)
+            return []
+        data = resp.json()
+        jobs = []
+        qlow = (query or "").lower()
+        for item in data.get("data", []):
+            title = item.get("title", "")
+            if qlow and qlow not in title.lower():
+                continue
+            jobs.append({
+                "id": item.get("slug"),
+                "title": title,
+                "company": item.get("company_name", ""),
+                "location": item.get("location", ""),
+                "description": item.get("description", ""),
+                "url": item.get("url", ""),
+                "raw": item
+            })
+            if len(jobs) >= limit:
+                break
+        return jobs
+    except Exception as e:
+        logger.warning("Arbeitnow query failed: %s", e)
+        return []
+
+# ---------------------------
+# Jobicy (free JSON API)
+# ---------------------------
+def query_jobicy(query: str, limit: int = 50) -> List[Dict]:
+    try:
+        url = "https://jobicy.com/api/v2/remote-jobs"
+        params = {"count": limit}
+        if query:
+            params["tag"] = query
+        resp = http_request("GET", url, params=params)
+        if resp.status_code != 200:
+            logger.debug("Jobicy returned %s", resp.status_code)
+            return []
+        data = resp.json()
+        jobs = []
+        for item in data.get("jobs", []):
+            jobs.append({
+                "id": item.get("id"),
+                "title": item.get("jobTitle", ""),
+                "company": item.get("companyName", ""),
+                "location": item.get("jobGeo", "Remote"),
+                "description": item.get("jobDescription", ""),
+                "url": item.get("url", ""),
+                "raw": item
+            })
+        return jobs
+    except Exception as e:
+        logger.warning("Jobicy query failed: %s", e)
+        return []
+
+# ---------------------------
+# Himalayas (free JSON API)
+# ---------------------------
+def query_himalayas(query: str, limit: int = 40) -> List[Dict]:
+    try:
+        url = "https://himalayas.app/jobs/api"
+        params = {"limit": limit}
+        if query:
+            params["q"] = query
+        resp = http_request("GET", url, params=params)
+        if resp.status_code != 200:
+            logger.debug("Himalayas returned %s", resp.status_code)
+            return []
+        data = resp.json()
+        jobs = []
+        for item in data.get("jobs", []):
+            jobs.append({
+                "id": item.get("id"),
+                "title": item.get("title", ""),
+                "company": item.get("companyName", ""),
+                "location": item.get("locationRestrictions", "Remote"),
+                "description": item.get("description", ""),
+                "url": f"https://himalayas.app/jobs/{item.get('slug', '')}",
+                "raw": item
+            })
+        return jobs
+    except Exception as e:
+        logger.warning("Himalayas query failed: %s", e)
+        return []
+
+
 # -------------------------
 # Indeed HTML parse (careful)
 # -------------------------
@@ -536,12 +631,18 @@ def main():
                         elif stype == "remoteok":
                             candidate_jobs += query_remoteok(qtext, limit=src.get("limit", 80))
                         elif stype == "weworkremotely":
-                            candidate_jobs += parse_weworkremotely(qtext, limit=src.get("limit", 30))
+                            candidate_jobs += elif stype == "linkedin"(qtext, limit=src.get("limit", 30))
                         elif stype == "indeed":
                             if src.get("enabled_html", False):
                                 candidate_jobs += parse_indeed(query or qtext, city, limit=src.get("limit", 20))
                         elif stype == "linkedin":
                             if src.get("enabled_html", False):
+                                                elif stype == "arbeitnow":
+                    candidate_jobs += query_arbeitnow(qtext, limit=src.get("limit", 50))
+                elif stype == "jobicy":
+                    candidate_jobs += query_jobicy(qtext, limit=src.get("limit", 50))
+                elif stype == "himalayas":
+                    candidate_jobs += query_himalayas(qtext, limit=src.get("limit", 40))
                                 candidate_jobs += parse_linkedin(query or qtext, city, limit=src.get("limit", 15))
                         elif stype == "html":
                             endpoint = src.get("endpoint")
