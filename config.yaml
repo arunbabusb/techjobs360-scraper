@@ -8,7 +8,7 @@ global:
 # SOURCES - enable/disable here
 sources:
   - type: jsearch
-    enabled: true
+    enabled: true  # ENABLED - Using FREE tier (will fail gracefully when quota exhausted)
 
   - type: remotive
     enabled: true
@@ -36,16 +36,16 @@ sources:
 
   - type: indeed
     enabled: true
-    enabled_html: false   # set true to enable Indeed scraping (cautious)
+    enabled_html: true   # ENABLED - Indeed HTML scraping
     limit: 30
 
   - type: linkedin
     enabled: true
-    enabled_html: false   # set true to enable LinkedIn scraping (may require login)
+    enabled_html: true   # ENABLED - LinkedIn HTML scraping
     limit: 20
 
   - type: html
-    enabled: false
+    enabled: false   # Keep disabled - requires custom endpoint configuration
     endpoint: "https://example.com/search?q={query}&city={city}"
     limit: 10
 

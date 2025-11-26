@@ -631,37 +631,38 @@ def main():
                         elif stype == "remoteok":
                             candidate_jobs += query_remoteok(qtext, limit=src.get("limit", 80))
                         elif stype == "weworkremotely":
-                            candidate_jobs += query_weworkremotely(qtext, limit=src.get("limit", 40))
+                            candidate_jobs += parse_weworkremotely(qtext, limit=src.get("limit", 40))
+                        elif stype == "arbeitnow":
+                            candidate_jobs += query_arbeitnow(qtext, limit=src.get("limit", 50))
+                        elif stype == "jobicy":
+                            candidate_jobs += query_jobicy(qtext, limit=src.get("limit", 50))
+                        elif stype == "himalayas":
+                            candidate_jobs += query_himalayas(qtext, limit=src.get("limit", 40))
                         elif stype == "indeed":
                             if src.get("enabled_html", False):
                                 candidate_jobs += parse_indeed(query or qtext, city, limit=src.get("limit", 20))
-                            elif stype == "arbeitnow":
-                                candidate_jobs += query_arbeitnow(qtext, limit=src.get("limit", 50))
-                            elif stype == "jobicy":
-                                candidate_jobs += query_jobicy(qtext, limit=src.get("limit", 50))
-                            elif stype == "himalayas":
-                                candidate_jobs += query_himalayas(qtext, limit=src.get("limit", 40))                                
                         elif stype == "linkedin":
                             if src.get("enabled_html", False):
-                                candidate_jobs += parse_linkedin(query or qtext, city, limit=src.get("limit", 15))                        elif stype == "html":
-                                endpoint = src.get("endpoint")
-                                if endpoint:
-                                    try:
-                                        url = endpoint.format(query=requests.utils.quote(query or ""), city=requests.utils.quote(city or ""))
-                                        resp = http_request("GET", url)
-                                        soup = BeautifulSoup(resp.text, "html.parser")
-                                        for a in soup.select("a")[:src.get("limit", 10)]:
-                                            href = a.get("href")
-                                            if not href:
-                                                continue
-                                            title = a.get_text(strip=True)
-                                            candidate_jobs.append({"id": None, "title": title, "company": "", "location": city, "description": "", "url": requests.compat.urljoin(url, href)})
-                                    except Exception as e:
-                                        logger.debug("HTML source parse failed: %s", e)
-                            else:
-                                logger.debug("Unknown source type in config: %s", stype)
-                        except Exception as e:
-                            logger.warning("Source %s failed for query=%r: %s", stype, qtext, e)
+                                candidate_jobs += parse_linkedin(query or qtext, city, limit=src.get("limit", 15))
+                        elif stype == "html":
+                            endpoint = src.get("endpoint")
+                            if endpoint:
+                                try:
+                                    url = endpoint.format(query=requests.utils.quote(query or ""), city=requests.utils.quote(city or ""))
+                                    resp = http_request("GET", url)
+                                    soup = BeautifulSoup(resp.text, "html.parser")
+                                    for a in soup.select("a")[:src.get("limit", 10)]:
+                                        href = a.get("href")
+                                        if not href:
+                                            continue
+                                        title = a.get_text(strip=True)
+                                        candidate_jobs.append({"id": None, "title": title, "company": "", "location": city, "description": "", "url": requests.compat.urljoin(url, href)})
+                                except Exception as e:
+                                    logger.debug("HTML source parse failed: %s", e)
+                        else:
+                            logger.debug("Unknown source type in config: %s", stype)
+                    except Exception as e:
+                        logger.warning("Source %s failed for query=%r: %s", stype, qtext, e)
     
                     # polite pause per source
                     time.sleep(base_pause + random.random() * base_pause)
