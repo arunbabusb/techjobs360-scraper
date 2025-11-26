@@ -635,12 +635,12 @@ def main():
                         elif stype == "indeed":
                             if src.get("enabled_html", False):
                                 candidate_jobs += parse_indeed(query or qtext, city, limit=src.get("limit", 20))
-                    elif stype == "arbeitnow":
-                        candidate_jobs += query_arbeitnow(qtext, limit=src.get("limit", 50))
-                    elif stype == "jobicy":
-                        candidate_jobs += query_jobicy(qtext, limit=src.get("limit", 50))
-                    elif stype == "himalayas":
-                        candidate_jobs += query_himalayas(qtext, limit=src.get("limit", 40))
+                        elif stype == "arbeitnow":
+                            candidate_jobs += query_arbeitnow(qtext, limit=src.get("limit", 50))
+                        elif stype == "jobicy":
+                            candidate_jobs += query_jobicy(qtext, limit=src.get("limit", 50))
+                        elif stype == "himalayas":
+                            candidate_jobs += query_himalayas(qtext, limit=src.get("limit", 40))                                
                     elif stype == "linkedin":
                         if src.get("enabled_html", False):
                             candidate_jobs += parse_linkedin(query or qtext, city, limit=src.get("limit", 15))                        elif stype == "html":
