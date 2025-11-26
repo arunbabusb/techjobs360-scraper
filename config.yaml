@@ -8,7 +8,7 @@ global:
 # SOURCES - enable/disable here
 sources:
   - type: jsearch
-    enabled: false  # Disabled - using only FREE sources (no API costs)
+    enabled: true  # ENABLED - Using FREE tier (will fail gracefully when quota exhausted)
 
   - type: remotive
     enabled: true
