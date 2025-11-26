@@ -19,15 +19,15 @@ sources:
     limit: 80
 
   - type: arbeitnow
-    enabled: false  # Disabled - no implementation in job_scraper.py
+    enabled: true  # Disabled - no implementation in job_scraper.py
     limit: 50
 
   - type: jobicy
-    enabled: false  # Disabled - no implementation in job_scraper.py
+    enabled: true  # Disabled - no implementation in job_scraper.py
     limit: 50
 
   - type: himalayas
-    enabled: false
+    enabled: true
     limit: 40
 
   - type: weworkremotely
