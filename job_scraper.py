@@ -495,16 +495,14 @@ def post_to_wp(job: Dict, continent_id: str, country_code: str, posting_cfg: Dic
     apply_url = job.get("url") or ""
     slug = slugify(f"{title}-{company}-{location}")[:200]
 
+    # Add continent and country to content instead of tags
     content = f"<p><strong>Company:</strong> {company}</p>"
     content += f"<p><strong>Location:</strong> {location}</p>"
+    if continent_id:
+        content += f"<p><strong>Region:</strong> {continent_id.replace('_', ' ').title()}</p>"
     if apply_url:
         content += f'<p><strong>Apply:</strong> <a href="{apply_url}" target="_blank" rel="noopener">{apply_url}</a></p>'
     content += "<hr/>" + (job.get("description") or "")
-
-    tags = posting_cfg.get("tags", []).copy() if posting_cfg else []
-    tags.append(f"continent:{continent_id}")
-    if country_code:
-        tags.append(f"country:{country_code}")
 
     # WP Job Manager payload
     job_manager_payload = {
@@ -521,13 +519,12 @@ def post_to_wp(job: Dict, continent_id: str, country_code: str, posting_cfg: Dic
         }
     }
 
-    # Regular posts payload (fallback)
+    # Regular posts payload (fallback) - NO TAGS to avoid 400 errors
     posts_payload = {
         "title": title,
         "content": content,
         "slug": slug,
-        "status": posting_cfg.get("post_status", "draft") if posting_cfg else "draft",
-        "tags": tags
+        "status": posting_cfg.get("post_status", "draft") if posting_cfg else "draft"
     }
 
     if job.get("_featured_media_id"):
