@@ -484,7 +484,11 @@ def post_to_wp(job: Dict, continent_id: str, country_code: str, posting_cfg: Dic
     if not (WP_URL and WP_USERNAME and WP_APP_PASSWORD):
         logger.error("Missing WP credentials; cannot post.")
         return None
-    endpoint = WP_URL.rstrip("/") + "/wp-json/wp/v2/posts"
+
+    # Try WP Job Manager endpoint first, fallback to regular posts
+    job_manager_endpoint = WP_URL.rstrip("/") + "/wp-json/wp/v2/job-listings"
+    posts_endpoint = WP_URL.rstrip("/") + "/wp-json/wp/v2/posts"
+
     title = job.get("title") or "Job"
     company = job.get("company") or ""
     location = job.get("location") or ""
@@ -502,7 +506,23 @@ def post_to_wp(job: Dict, continent_id: str, country_code: str, posting_cfg: Dic
     if country_code:
         tags.append(f"country:{country_code}")
 
-    payload = {
+    # WP Job Manager payload
+    job_manager_payload = {
+        "title": title,
+        "content": content,
+        "slug": slug,
+        "status": posting_cfg.get("post_status", "draft") if posting_cfg else "draft",
+        "meta": {
+            "_company_name": company,
+            "_job_location": location,
+            "_application": apply_url,
+            "_job_expires": "",
+            "_filled": "0"
+        }
+    }
+
+    # Regular posts payload (fallback)
+    posts_payload = {
         "title": title,
         "content": content,
         "slug": slug,
@@ -511,11 +531,25 @@ def post_to_wp(job: Dict, continent_id: str, country_code: str, posting_cfg: Dic
     }
 
     if job.get("_featured_media_id"):
-        payload["featured_media"] = job.get("_featured_media_id")
+        job_manager_payload["featured_media"] = job.get("_featured_media_id")
+        posts_payload["featured_media"] = job.get("_featured_media_id")
 
+    # Try WP Job Manager first
     try:
-        resp = http_request("POST", endpoint, auth=(WP_USERNAME, WP_APP_PASSWORD), json=payload)
+        resp = http_request("POST", job_manager_endpoint, auth=(WP_USERNAME, WP_APP_PASSWORD), json=job_manager_payload)
+        if resp.status_code == 201:
+            logger.info("Posted to WP Job Manager: %s", title)
+            return resp.json().get("id")
+        else:
+            logger.debug("WP Job Manager endpoint returned %s, trying regular posts", resp.status_code)
+    except Exception as e:
+        logger.debug("WP Job Manager post failed: %s, trying regular posts", e)
+
+    # Fallback to regular posts
+    try:
+        resp = http_request("POST", posts_endpoint, auth=(WP_USERNAME, WP_APP_PASSWORD), json=posts_payload)
         resp.raise_for_status()
+        logger.info("Posted to regular WP posts: %s", title)
         return resp.json().get("id")
     except Exception as e:
         logger.error("Failed to post job to WP: %s", e)
