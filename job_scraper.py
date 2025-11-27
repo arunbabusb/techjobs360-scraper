@@ -486,7 +486,8 @@ def post_to_wp(job: Dict, continent_id: str, country_code: str, posting_cfg: Dic
         return None
 
     # Try WP Job Manager endpoint first, fallback to regular posts
-    job_manager_endpoint = WP_URL.rstrip("/") + "/wp-json/wp/v2/job-listings"
+    # IMPORTANT: Use /job_listing (singular, underscore) not /job-listings (plural, hyphen)
+    job_manager_endpoint = WP_URL.rstrip("/") + "/wp-json/wp/v2/job_listing"
     posts_endpoint = WP_URL.rstrip("/") + "/wp-json/wp/v2/posts"
 
     title = job.get("title") or "Job"
