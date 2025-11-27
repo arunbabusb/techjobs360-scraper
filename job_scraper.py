@@ -484,38 +484,70 @@ def post_to_wp(job: Dict, continent_id: str, country_code: str, posting_cfg: Dic
     if not (WP_URL and WP_USERNAME and WP_APP_PASSWORD):
         logger.error("Missing WP credentials; cannot post.")
         return None
-    endpoint = WP_URL.rstrip("/") + "/wp-json/wp/v2/posts"
+
+    # Try WP Job Manager endpoint first, fallback to regular posts
+    # IMPORTANT: Use /job_listing (singular, underscore) not /job-listings (plural, hyphen)
+    job_manager_endpoint = WP_URL.rstrip("/") + "/wp-json/wp/v2/job_listing"
+    posts_endpoint = WP_URL.rstrip("/") + "/wp-json/wp/v2/posts"
+
     title = job.get("title") or "Job"
     company = job.get("company") or ""
     location = job.get("location") or ""
     apply_url = job.get("url") or ""
     slug = slugify(f"{title}-{company}-{location}")[:200]
 
+    # Add continent and country to content instead of tags
     content = f"<p><strong>Company:</strong> {company}</p>"
     content += f"<p><strong>Location:</strong> {location}</p>"
+    if continent_id:
+        content += f"<p><strong>Region:</strong> {continent_id.replace('_', ' ').title()}</p>"
     if apply_url:
         content += f'<p><strong>Apply:</strong> <a href="{apply_url}" target="_blank" rel="noopener">{apply_url}</a></p>'
     content += "<hr/>" + (job.get("description") or "")
 
-    tags = posting_cfg.get("tags", []).copy() if posting_cfg else []
-    tags.append(f"continent:{continent_id}")
-    if country_code:
-        tags.append(f"country:{country_code}")
-
-    payload = {
+    # WP Job Manager payload
+    job_manager_payload = {
         "title": title,
         "content": content,
         "slug": slug,
         "status": posting_cfg.get("post_status", "draft") if posting_cfg else "draft",
-        "tags": tags
+        "meta": {
+            "_company_name": company,
+            "_job_location": location,
+            "_application": apply_url,
+            "_job_expires": "",
+            "_filled": "0"
+        }
+    }
+
+    # Regular posts payload (fallback) - NO TAGS to avoid 400 errors
+    posts_payload = {
+        "title": title,
+        "content": content,
+        "slug": slug,
+        "status": posting_cfg.get("post_status", "draft") if posting_cfg else "draft"
     }
 
     if job.get("_featured_media_id"):
-        payload["featured_media"] = job.get("_featured_media_id")
+        job_manager_payload["featured_media"] = job.get("_featured_media_id")
+        posts_payload["featured_media"] = job.get("_featured_media_id")
 
+    # Try WP Job Manager first
     try:
-        resp = http_request("POST", endpoint, auth=(WP_USERNAME, WP_APP_PASSWORD), json=payload)
+        resp = http_request("POST", job_manager_endpoint, auth=(WP_USERNAME, WP_APP_PASSWORD), json=job_manager_payload)
+        if resp.status_code == 201:
+            logger.info("Posted to WP Job Manager: %s", title)
+            return resp.json().get("id")
+        else:
+            logger.debug("WP Job Manager endpoint returned %s, trying regular posts", resp.status_code)
+    except Exception as e:
+        logger.debug("WP Job Manager post failed: %s, trying regular posts", e)
+
+    # Fallback to regular posts
+    try:
+        resp = http_request("POST", posts_endpoint, auth=(WP_USERNAME, WP_APP_PASSWORD), json=posts_payload)
         resp.raise_for_status()
+        logger.info("Posted to regular WP posts: %s", title)
         return resp.json().get("id")
     except Exception as e:
         logger.error("Failed to post job to WP: %s", e)
