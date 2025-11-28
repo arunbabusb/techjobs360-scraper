@@ -1,0 +1,146 @@
+═══════════════════════════════════════════════════════════════
+ TechJobs360 Scraper - cPanel Hosting Setup Instructions
+═══════════════════════════════════════════════════════════════
+
+STEP 1: Upload Files to Your Hosting
+═════════════════════════════════════
+
+1. Log into cPanel at: https://heroxhost.com/cpanel (or your hosting control panel)
+
+2. Go to "File Manager"
+
+3. Create a new folder: /home/youruser/techjobs360-scraper
+   (Replace 'youruser' with your actual cPanel username)
+
+4. Upload these files to that folder:
+   ✓ job_scraper.py
+   ✓ config.yaml
+   ✓ requirements.txt
+   ✓ posted_jobs.json
+   ✓ run_scraper.sh
+
+5. Set permissions on run_scraper.sh:
+   - Right-click → "Change Permissions"
+   - Set to 755 (executable)
+
+
+STEP 2: Check Python Availability
+═════════════════════════════════════
+
+Option A - Using Terminal in cPanel:
+1. Go to cPanel → "Terminal" (if available)
+2. Run: python3 --version
+3. If you see "Python 3.x.x" → Great! Continue to Step 3
+4. If you see "command not found" → Contact hosting support or use PHP version
+
+Option B - Using SSH (if you have access):
+1. SSH into your hosting
+2. Run: python3 --version
+
+
+STEP 3: Install Python Dependencies (if Python available)
+═════════════════════════════════════════════════════════
+
+In Terminal or SSH, run:
+
+cd /home/youruser/techjobs360-scraper
+pip3 install --user -r requirements.txt
+
+(Replace 'youruser' with your actual username)
+
+
+STEP 4: Test the Scraper Manually
+═════════════════════════════════════
+
+Run this command to test:
+
+cd /home/youruser/techjobs360-scraper && bash run_scraper.sh
+
+Wait 2-3 minutes, then check:
+- Your WordPress at: https://www.techjobs360.com/wp-admin/edit.php?post_type=job_listing
+- You should see new jobs posted!
+
+
+STEP 5: Set Up Cron Job in cPanel
+═════════════════════════════════════
+
+1. Go to cPanel → "Cron Jobs"
+
+2. Under "Add New Cron Job":
+
+3. Common Settings: Select "Twice Per Day (0 0,12 * * *)"
+   OR manually set:
+   - Minute: 0
+   - Hour: 6,18  (runs at 6 AM and 6 PM server time)
+   - Day: *
+   - Month: *
+   - Weekday: *
+
+4. Command (copy this EXACTLY, replace paths):
+
+/bin/bash /home/youruser/techjobs360-scraper/run_scraper.sh
+
+   IMPORTANT: Replace 'youruser' with your actual cPanel username!
+
+5. Click "Add New Cron Job"
+
+
+STEP 6: Verify Cron is Working
+═════════════════════════════════════
+
+After 12-24 hours, check:
+
+1. Look at the log file:
+   /home/youruser/techjobs360-scraper/scraper.log
+
+2. Check WordPress for new jobs:
+   https://www.techjobs360.com/wp-admin/edit.php?post_type=job_listing
+
+3. You should see 50-100+ new jobs from FREE sources!
+
+
+═══════════════════════════════════════════════════════════════
+ ALTERNATIVE: If Python is NOT Available
+═══════════════════════════════════════════════════════════════
+
+If your hosting doesn't have Python, you have 2 options:
+
+Option 1: Use WordPress WP-Cron instead
+- Let me know and I'll create a WordPress plugin version
+
+Option 2: Request Python from hosting support
+- Contact Heroxhost support
+- Ask them to enable Python 3.8+ on your account
+- Many hosts provide this for free
+
+
+═══════════════════════════════════════════════════════════════
+ Troubleshooting
+═══════════════════════════════════════════════════════════════
+
+Problem: "python3: command not found"
+Solution: Python not installed. Use WordPress plugin version or ask hosting for Python.
+
+Problem: "Permission denied"
+Solution: Run: chmod +x /home/youruser/techjobs360-scraper/run_scraper.sh
+
+Problem: No jobs appearing
+Solution: Check scraper.log file for errors
+
+Problem: "No module named 'requests'"
+Solution: Run: pip3 install --user -r requirements.txt
+
+
+═══════════════════════════════════════════════════════════════
+ Need Help?
+═══════════════════════════════════════════════════════════════
+
+If you get stuck at any step, send me:
+1. Screenshot of the error
+2. Contents of scraper.log file
+3. Output of: python3 --version
+
+I'll help you fix it!
+
+
+═══════════════════════════════════════════════════════════════
