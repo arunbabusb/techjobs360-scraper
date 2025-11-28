@@ -8,5 +8,125 @@
     ],
     "url": "https://himalayas.app/jobs/",
     "first_seen": 1764229203
+  },
+  {
+    "hash": "bccdfd7924e52cca872772cd527db19f63ac96e1",
+    "title": "Chief Financial & Investment Officer",
+    "company": "Rypples Ltd",
+    "location": "UK",
+    "url": "https://remotive.com/remote-jobs/finance/chief-financial-investment-officer-2080662",
+    "first_seen": 1764336927
+  },
+  {
+    "hash": "7e20dca47a429a8ae6d8aeb2a313398de3437969",
+    "title": "Senior Product Designer",
+    "company": "AMBOSS",
+    "location": "Germany",
+    "url": "https://remotive.com/remote-jobs/design/senior-product-designer-2080529",
+    "first_seen": 1764336929
+  },
+  {
+    "hash": "e73fa887a9a457b58a2edc0dd10c7a159c380cf5",
+    "title": "Sr. Product Manager",
+    "company": "Pluribus Digital",
+    "location": "USA",
+    "url": "https://remotive.com/remote-jobs/product/sr-product-manager-2080587",
+    "first_seen": 1764336930
+  },
+  {
+    "hash": "90fad18cf92ec733f526838f4bf7c58dc55b7d6b",
+    "title": "Senior Security Data Analyst",
+    "company": "SpyCloud",
+    "location": "USA",
+    "url": "https://remotive.com/remote-jobs/data/senior-security-data-analyst-2080632",
+    "first_seen": 1764336932
+  },
+  {
+    "hash": "c1abb8a6cf491165e744fbd3c9d83199e524fb47",
+    "title": "QA Engineer",
+    "company": "Tech9",
+    "location": "India",
+    "url": "https://remotive.com/remote-jobs/qa/qa-engineer-2079717",
+    "first_seen": 1764336934
+  },
+  {
+    "hash": "3a843e8993b586759933e2a705888531890cf9c7",
+    "title": "Senior Game Designer",
+    "company": "Softgames",
+    "location": "Europe",
+    "url": "https://remotive.com/remote-jobs/design/senior-game-designer-2080526",
+    "first_seen": 1764336935
+  },
+  {
+    "hash": "0ff5dc94ec0a14323e0659e75bcf5ff3114408fb",
+    "title": "Senior Software Developer",
+    "company": "ATLAS ANALYTICS",
+    "location": "Singapore",
+    "url": "https://remotive.com/remote-jobs/software-development/senior-software-developer-2080490",
+    "first_seen": 1764336936
+  },
+  {
+    "hash": "d439e50fd0a87a9468e103022c66af01601c604c",
+    "title": "Technical Writer",
+    "company": "Miteksystems 2",
+    "location": "USA",
+    "url": "https://remotive.com/remote-jobs/writing/technical-writer-2080690",
+    "first_seen": 1764336938
+  },
+  {
+    "hash": "2e46d0c654aedfcf88e3817e4d7ff4034c5c9b1c",
+    "title": "Senior Graphic Designer",
+    "company": "Hiflylabs",
+    "location": "Hungary",
+    "url": "https://remotive.com/remote-jobs/design/senior-graphic-designer-2080523",
+    "first_seen": 1764336939
+  },
+  {
+    "hash": "c547782a16c0e97a7873fc410aa3b7db6e35f3e3",
+    "title": "Senior Product Manager",
+    "company": "Socure",
+    "location": "USA",
+    "url": "https://remotive.com/remote-jobs/product/senior-product-manager-2080585",
+    "first_seen": 1764336940
+  },
+  {
+    "hash": "0784a942da70ae0799ad129f973e22035710f9bc",
+    "title": "Senior Business Intelligence Developer",
+    "company": "Vaya Health",
+    "location": "USA",
+    "url": "https://remotive.com/remote-jobs/data/senior-business-intelligence-developer-2080628",
+    "first_seen": 1764336942
+  },
+  {
+    "hash": "25cece82edd6e122e297c157aaf1d4299c1abb99",
+    "title": "DevOps Engineer",
+    "company": "BruntWork",
+    "location": "Thailand",
+    "url": "https://remotive.com/remote-jobs/devops/devops-engineer-2080646",
+    "first_seen": 1764336943
+  },
+  {
+    "hash": "5798becf4d495d4e8eb88df445a0ea53ac3f0886",
+    "title": "Senior Manual QA Engineer",
+    "company": "Veli Technologies Ltd.",
+    "location": "Ukraine",
+    "url": "https://remotive.com/remote-jobs/qa/senior-manual-qa-engineer-2079714",
+    "first_seen": 1764336944
+  },
+  {
+    "hash": "19fc5e2cd7ab8d3a7f69a322678cf1ad2cf501a0",
+    "title": "QA Engineer",
+    "company": "Joyteractive",
+    "location": "Europe",
+    "url": "https://remotive.com/remote-jobs/qa/qa-engineer-2079715",
+    "first_seen": 1764336946
+  },
+  {
+    "hash": "96449734726aa731b07b84a6449a90d3289f925e",
+    "title": "Scrum Master",
+    "company": "Thaloz",
+    "location": "Colombia",
+    "url": "https://remotive.com/remote-jobs/project-management/scrum-master-2080617",
+    "first_seen": 1764336947
   }
 ]
