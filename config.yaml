@@ -43,7 +43,7 @@ sources:
 
   - type: reed
     enabled: true  # ENABLED - Reed API for UK jobs (requires REED_API_KEY)
-    limit: 20
+    limit: 50
 
   - type: weworkremotely
     enabled: true
@@ -186,6 +186,30 @@ continents:
             query: devops engineer
           - city: Edinburgh
             query: cloud engineer
+          - city: Bristol
+            query: frontend developer
+          - city: Cambridge
+            query: data scientist
+          - city: Oxford
+            query: machine learning engineer
+          - city: Glasgow
+            query: full stack developer
+          - city: Liverpool
+            query: python developer
+          - city: Newcastle
+            query: react developer
+          - city: Brighton
+            query: mobile developer
+          - city: Nottingham
+            query: QA engineer
+          - city: Reading
+            query: software engineer
+          - city: Southampton
+            query: backend developer
+          - city: Cardiff
+            query: cloud architect
+          - city: Belfast
+            query: nodejs developer
       - code: DE
         name: Germany
         locales:
