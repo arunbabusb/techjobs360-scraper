@@ -8,7 +8,7 @@ on:
     branches: ["main"]
   workflow_dispatch:
   schedule:
-    - cron: '30 6,18 * * *'  # Runs 2x daily at 06:30,18:30 UTC -> 12:00,00:00 IST (conserves JSearch free tier)
+    - cron: '30 */6 * * *'  # Runs 4x daily at 00:30, 06:30, 12:30, 18:30 UTC (every 6 hours)
 
 concurrency:
   group: techjobs360-scrape
