@@ -42,7 +42,7 @@ sources:
     permanent: false  # Set to true to filter only permanent contracts
 
   - type: reed
-    enabled: false  # Set to true when REED_API_KEY is configured (UK jobs)
+    enabled: true  # ENABLED - Reed API for UK jobs (requires REED_API_KEY)
     limit: 20
 
   - type: weworkremotely
