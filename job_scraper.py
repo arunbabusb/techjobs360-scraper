@@ -386,50 +386,94 @@ def query_himalayas(query: str, limit: int = 40) -> List[Dict]:
 
 # ---------------------------
 # Adzuna API (requires app_id & app_key)
+# Docs: https://developer.adzuna.com/docs/search
 # ---------------------------
-def query_adzuna(query: str, location: Optional[str] = None, limit: int = 20) -> List[Dict]:
+def query_adzuna(query: str, location: Optional[str] = None, limit: int = 20,
+                 country_code: str = "us", max_days_old: Optional[int] = None,
+                 sort_by: str = "relevance", full_time: bool = False,
+                 permanent: bool = False) -> List[Dict]:
+    """
+    Query Adzuna API for jobs.
+
+    Args:
+        query: Job title/keywords to search
+        location: Location filter (city, region, etc.)
+        limit: Number of results to return
+        country_code: ISO country code (us, gb, ca, au, etc.) - default: us
+        max_days_old: Only show jobs posted within last N days
+        sort_by: Sort order - 'relevance', 'date', or 'salary'
+        full_time: Filter for full-time positions only
+        permanent: Filter for permanent contracts only
+
+    Returns:
+        List of job dictionaries
+    """
     if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
         logger.debug("No ADZUNA_APP_ID or ADZUNA_APP_KEY set; skipping adzuna")
         return []
 
     try:
-        # Adzuna uses country-specific endpoints (default to US)
+        # Adzuna uses country-specific endpoints
         # Format: https://api.adzuna.com/v1/api/jobs/{country}/search/1
-        country_code = "us"  # Default to US, can be made configurable
         url = f"https://api.adzuna.com/v1/api/jobs/{country_code}/search/1"
 
+        # Build parameters according to official API docs
         params = {
             "app_id": ADZUNA_APP_ID,
             "app_key": ADZUNA_APP_KEY,
             "results_per_page": limit,
-            "what": query or ""
+            "what": query or "",
+            "content-type": "application/json"
         }
 
+        # Optional parameters
         if location:
             params["where"] = location
 
+        if max_days_old:
+            params["max_days_old"] = max_days_old
+
+        if sort_by and sort_by != "relevance":
+            params["sort_by"] = sort_by
+
+        if full_time:
+            params["full_time"] = 1
+
+        if permanent:
+            params["permanent"] = 1
+
         resp = http_request("GET", url, params=params)
         if resp.status_code != 200:
-            logger.warning("Adzuna returned %s for %r/%r: %s", resp.status_code, query, location, (resp.text or "")[:300])
+            logger.warning("Adzuna returned %s for %r/%r (country=%s): %s",
+                          resp.status_code, query, location, country_code, (resp.text or "")[:300])
             return []
 
         data = resp.json()
         jobs = []
 
         for item in data.get("results", []):
+            # Extract company name (can be dict or string)
+            company = item.get("company", {})
+            company_name = company.get("display_name") if isinstance(company, dict) else company
+
+            # Extract location (can be dict or string)
+            loc = item.get("location", {})
+            location_name = loc.get("display_name") if isinstance(loc, dict) else location or ""
+
             jobs.append({
                 "id": item.get("id"),
                 "title": item.get("title"),
-                "company": item.get("company", {}).get("display_name") if isinstance(item.get("company"), dict) else item.get("company"),
-                "location": item.get("location", {}).get("display_name") if isinstance(item.get("location"), dict) else location or "",
+                "company": company_name,
+                "location": location_name,
                 "description": item.get("description") or "",
                 "url": item.get("redirect_url") or "",
                 "raw": item
             })
 
+        logger.info("Adzuna returned %d jobs for %r in %s", len(jobs), query, country_code)
         return jobs
     except Exception as e:
-        logger.warning("Adzuna request exception for %r/%r: %s", query, location, e)
+        logger.warning("Adzuna request exception for %r/%r (country=%s): %s", query, location, country_code, e)
         return []
 
 # ---------------------------
@@ -768,7 +812,16 @@ def main():
                         elif stype == "himalayas":
                             candidate_jobs += query_himalayas(qtext, limit=src.get("limit", 40))
                         elif stype == "adzuna":
-                            candidate_jobs += query_adzuna(qtext, location=city or country_name, limit=src.get("limit", 20))
+                            candidate_jobs += query_adzuna(
+                                qtext,
+                                location=city or country_name,
+                                limit=src.get("limit", 20),
+                                country_code=src.get("country_code", "us"),
+                                max_days_old=src.get("max_days_old"),
+                                sort_by=src.get("sort_by", "relevance"),
+                                full_time=src.get("full_time", False),
+                                permanent=src.get("permanent", False)
+                            )
                         elif stype == "reed":
                             candidate_jobs += query_reed(qtext, location=city or country_name, limit=src.get("limit", 20))
                         elif stype == "indeed":
