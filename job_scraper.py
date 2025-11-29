@@ -224,39 +224,8 @@ def query_jsearch(query: str, location: Optional[str] = None, per_page: int = 20
     # If both failed or no keys set
     if not JSEARCH_API_KEY and not JSEARCH_OPENWEBNINJA_KEY:
         logger.debug("No JSearch API keys set; skipping jsearch")
-    
+
     return results
-
-
-    url = "https://jsearch.p.rapidapi.com/search"
-    headers = {
-        "X-RapidAPI-Key": JSEARCH_API_KEY,
-        "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
-        "Accept": "application/json"
-    }
-    params = {"query": query or "", "location": location or "", "page": 1, "num_pages": 1}
-
-    try:
-        resp = http_request("GET", url, headers=headers, params=params)
-        if resp.status_code != 200:
-            logger.warning("JSearch returned %s for %r/%r: %s", resp.status_code, query, location, (resp.text or "")[:300])
-            return []
-        data = resp.json()
-        jobs = []
-        for item in data.get("data", []):
-            jobs.append({
-                "id": item.get("job_id") or item.get("id"),
-                "title": item.get("job_title") or item.get("title"),
-                "company": item.get("employer_name") or item.get("company"),
-                "location": item.get("job_city") or item.get("location") or location,
-                "description": item.get("job_description") or "",
-                "url": item.get("job_apply_link") or item.get("apply_link") or item.get("url"),
-                "raw": item
-            })
-        return jobs
-    except Exception as e:
-        logger.warning("JSearch request exception for %r/%r: %s", query, location, e)
-        return []
 
 # -------------------------
 # Remotive (free JSON)
@@ -807,7 +776,9 @@ def classify_job(title: str, description: str) -> Dict:
 # -------------------------
 def pick_continent_by_weekday(continents: List[Dict]) -> Optional[str]:
     weekday = datetime.utcnow().weekday()
-    mapping = {0:"asia",1:"europe",2:"north_america",3:"south_america",4:"africa",5:"oceania",6:"antarctica"}
+    # Updated mapping: Rotate through 6 major continents (skip Antarctica)
+    # Sunday (6) now maps to Asia instead of Antarctica for better job coverage
+    mapping = {0:"asia",1:"europe",2:"north_america",3:"south_america",4:"africa",5:"oceania",6:"asia"}
     target = mapping.get(weekday)
     for c in continents:
         if c.get("id") == target:

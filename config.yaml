@@ -308,18 +308,20 @@ continents:
             query: devops engineer
           - city: Melbourne
             query: backend developer
+          - city: Brisbane
+            query: full stack developer
+          - city: Perth
+            query: software engineer
+          - city: Adelaide
+            query: frontend developer
+          - city: Canberra
+            query: cloud engineer
       - code: NZ
         name: New Zealand
         locales:
           - city: Auckland
             query: software engineer
-
-  - id: antarctica
-    name: Antarctica
-    pause_seconds: 2
-    countries:
-      - code: AQ
-        name: Antarctica
-        locales:
-          - city: Antarctica Base
-            query: researcher
+          - city: Wellington
+            query: python developer
+          - city: Christchurch
+            query: data scientist
