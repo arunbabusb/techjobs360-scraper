@@ -42,6 +42,9 @@ jobs:
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
           JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          REED_API_KEY: ${{ secrets.REED_API_KEY }}
           PROCESS_CONTINENT: ${{ secrets.PROCESS_CONTINENT }}
           AUTO_ROTATE: "true"
         run: python job_scraper.py
