@@ -3,7 +3,7 @@
 global:
   default_per_page: 20
   fallback_per_page: 10
-  auto_rotate: true   # rotate continents by weekday
+  auto_rotate: false   # DISABLED - scrape ALL continents every run for maximum coverage
 
 # SOURCES - enable/disable here
 sources:
