@@ -43,6 +43,7 @@ WP_URL = os.environ.get("WP_URL")
 WP_USERNAME = os.environ.get("WP_USERNAME")
 WP_APP_PASSWORD = os.environ.get("WP_APP_PASSWORD")
 JSEARCH_API_KEY = os.environ.get("JSEARCH_API_KEY")
+JSEARCH_OPENWEBNINJA_KEY = os.environ.get("JSEARCH_OPENWEBNINJA_KEY")
 ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID")
 ADZUNA_APP_KEY = os.environ.get("ADZUNA_APP_KEY")
 REED_API_KEY = os.environ.get("REED_API_KEY")
@@ -154,9 +155,78 @@ def http_request(method: str, url: str, **kwargs) -> requests.Response:
 # RapidAPI JSearch (kept)
 # -------------------------
 def query_jsearch(query: str, location: Optional[str] = None, per_page: int = 20) -> List[Dict]:
-    if not JSEARCH_API_KEY:
-        logger.debug("No JSEARCH_API_KEY set; skipping jsearch")
-        return []
+    """Query JSearch with fallback: tries RapidAPI first, then OpenWeb Ninja."""
+    results = []
+    
+    # 1. Try RapidAPI first
+    if JSEARCH_API_KEY:
+        try:
+            url = "https://jsearch.p.rapidapi.com/search"
+            headers = {
+                "X-RapidAPI-Key": JSEARCH_API_KEY,
+                "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
+                "Accept": "application/json"
+            }
+            params = {"query": query or "", "location": location or "", "page": 1, "num_pages": 1}
+            resp = http_request("GET", url, headers=headers, params=params)
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                for item in data.get("data", []):
+                    results.append({
+                        "id": item.get("job_id") or item.get("id"),
+                        "title": item.get("job_title") or item.get("title"),
+                        "company": item.get("employer_name") or item.get("company"),
+                        "location": item.get("job_city") or item.get("location") or location,
+                        "description": item.get("job_description") or "",
+                        "url": item.get("job_apply_link") or item.get("apply_link") or item.get("url"),
+                        "raw": item
+                    })
+                logger.info("RapidAPI JSearch returned %d jobs", len(results))
+                return results
+            elif resp.status_code == 429:
+                logger.warning("RapidAPI rate limit (429), trying OpenWeb Ninja fallback")
+            else:
+                logger.warning("RapidAPI returned %s, trying OpenWeb Ninja fallback", resp.status_code)
+        except Exception as e:
+            logger.warning("RapidAPI JSearch failed: %s, trying OpenWeb Ninja fallback", e)
+    
+    # 2. Fallback to OpenWeb Ninja
+    if JSEARCH_OPENWEBNINJA_KEY:
+        try:
+            url = "https://api.openwebninja.com/jsearch/search"
+            headers = {
+                "x-api-key": JSEARCH_OPENWEBNINJA_KEY,
+                "Accept": "application/json"
+            }
+            params = {"query": query or "", "location": location or "", "page": 1, "num_pages": 1}
+            resp = http_request("GET", url, headers=headers, params=params)
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                for item in data.get("data", []):
+                    results.append({
+                        "id": item.get("job_id") or item.get("id"),
+                        "title": item.get("job_title") or item.get("title"),
+                        "company": item.get("employer_name") or item.get("company"),
+                        "location": item.get("job_city") or item.get("location") or location,
+                        "description": item.get("job_description") or "",
+                        "url": item.get("job_apply_link") or item.get("apply_link") or item.get("url"),
+                        "raw": item
+                    })
+                logger.info("OpenWeb Ninja JSearch returned %d jobs", len(results))
+                return results
+            else:
+                logger.warning("OpenWeb Ninja returned %s", resp.status_code)
+        except Exception as e:
+            logger.warning("OpenWeb Ninja JSearch failed: %s", e)
+    
+    # If both failed or no keys set
+    if not JSEARCH_API_KEY and not JSEARCH_OPENWEBNINJA_KEY:
+        logger.debug("No JSearch API keys set; skipping jsearch")
+    
+    return results
+
 
     url = "https://jsearch.p.rapidapi.com/search"
     headers = {
