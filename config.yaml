@@ -19,16 +19,31 @@ sources:
     limit: 80
 
   - type: arbeitnow
-    enabled: true  # Disabled - no implementation in job_scraper.py
+    enabled: true  # Free API - European & remote jobs
     limit: 50
 
   - type: jobicy
-    enabled: true  # Disabled - no implementation in job_scraper.py
+    enabled: true  # Free API - Remote jobs worldwide
     limit: 50
 
   - type: himalayas
     enabled: true
     limit: 40
+
+  - type: adzuna
+    enabled: true  # ENABLED - Adzuna API with Trial Access
+    limit: 30
+    # Supported countries (19): us, gb, ca, au, nz, de, fr, es, it, nl, be, ch, at, pl, br, mx, in, sg, za
+    # See: https://developer.adzuna.com/docs/regional
+    country_code: us  # ISO 3166 alpha-2 country code (lowercase)
+    max_days_old: 14  # Only show jobs posted within last 14 days (reduces duplicates)
+    sort_by: relevance  # Options: relevance, date, salary
+    full_time: false  # Set to true to filter only full-time positions
+    permanent: false  # Set to true to filter only permanent contracts
+
+  - type: reed
+    enabled: true  # ENABLED - Reed API for UK jobs (requires REED_API_KEY)
+    limit: 50
 
   - type: weworkremotely
     enabled: true
@@ -171,6 +186,30 @@ continents:
             query: devops engineer
           - city: Edinburgh
             query: cloud engineer
+          - city: Bristol
+            query: frontend developer
+          - city: Cambridge
+            query: data scientist
+          - city: Oxford
+            query: machine learning engineer
+          - city: Glasgow
+            query: full stack developer
+          - city: Liverpool
+            query: python developer
+          - city: Newcastle
+            query: react developer
+          - city: Brighton
+            query: mobile developer
+          - city: Nottingham
+            query: QA engineer
+          - city: Reading
+            query: software engineer
+          - city: Southampton
+            query: backend developer
+          - city: Cardiff
+            query: cloud architect
+          - city: Belfast
+            query: nodejs developer
       - code: DE
         name: Germany
         locales:
