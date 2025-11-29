@@ -19,16 +19,24 @@ sources:
     limit: 80
 
   - type: arbeitnow
-    enabled: true  # Disabled - no implementation in job_scraper.py
+    enabled: true  # Free API - European & remote jobs
     limit: 50
 
   - type: jobicy
-    enabled: true  # Disabled - no implementation in job_scraper.py
+    enabled: true  # Free API - Remote jobs worldwide
     limit: 50
 
   - type: himalayas
     enabled: true
     limit: 40
+
+  - type: adzuna
+    enabled: false  # Set to true when ADZUNA_APP_ID and ADZUNA_APP_KEY are configured
+    limit: 20
+
+  - type: reed
+    enabled: false  # Set to true when REED_API_KEY is configured (UK jobs)
+    limit: 20
 
   - type: weworkremotely
     enabled: true

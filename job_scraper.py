@@ -4,7 +4,8 @@ TechJobs360 Combined Global Job Scraper (fixed & formatted)
 
 Features:
 - RapidAPI JSearch (if JSEARCH_API_KEY is provided and source enabled)
-- Free sources: Remotive, RemoteOK, WeWorkRemotely
+- Free sources: Remotive, RemoteOK, WeWorkRemotely, Arbeitnow, Jobicy, Himalayas
+- API sources (with keys): Adzuna (ADZUNA_APP_ID/KEY), Reed (REED_API_KEY)
 - Optional: Indeed / LinkedIn HTML scrapers (disabled by default in config.yaml)
 - Dedup (legacy list of hashes or list of dicts), pruning, and saving to posted_jobs.json
 - Clearbit logo fetch + WP media upload
@@ -42,6 +43,9 @@ WP_URL = os.environ.get("WP_URL")
 WP_USERNAME = os.environ.get("WP_USERNAME")
 WP_APP_PASSWORD = os.environ.get("WP_APP_PASSWORD")
 JSEARCH_API_KEY = os.environ.get("JSEARCH_API_KEY")
+ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID")
+ADZUNA_APP_KEY = os.environ.get("ADZUNA_APP_KEY")
+REED_API_KEY = os.environ.get("REED_API_KEY")
 PROCESS_CONTINENT = os.environ.get("PROCESS_CONTINENT")
 AUTO_ROTATE_ENV = os.environ.get("AUTO_ROTATE", "true").lower() in ("1", "true", "yes")
 
@@ -380,6 +384,99 @@ def query_himalayas(query: str, limit: int = 40) -> List[Dict]:
         logger.warning("Himalayas query failed: %s", e)
         return []
 
+# ---------------------------
+# Adzuna API (requires app_id & app_key)
+# ---------------------------
+def query_adzuna(query: str, location: Optional[str] = None, limit: int = 20) -> List[Dict]:
+    if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
+        logger.debug("No ADZUNA_APP_ID or ADZUNA_APP_KEY set; skipping adzuna")
+        return []
+
+    try:
+        # Adzuna uses country-specific endpoints (default to US)
+        # Format: https://api.adzuna.com/v1/api/jobs/{country}/search/1
+        country_code = "us"  # Default to US, can be made configurable
+        url = f"https://api.adzuna.com/v1/api/jobs/{country_code}/search/1"
+
+        params = {
+            "app_id": ADZUNA_APP_ID,
+            "app_key": ADZUNA_APP_KEY,
+            "results_per_page": limit,
+            "what": query or ""
+        }
+
+        if location:
+            params["where"] = location
+
+        resp = http_request("GET", url, params=params)
+        if resp.status_code != 200:
+            logger.warning("Adzuna returned %s for %r/%r: %s", resp.status_code, query, location, (resp.text or "")[:300])
+            return []
+
+        data = resp.json()
+        jobs = []
+
+        for item in data.get("results", []):
+            jobs.append({
+                "id": item.get("id"),
+                "title": item.get("title"),
+                "company": item.get("company", {}).get("display_name") if isinstance(item.get("company"), dict) else item.get("company"),
+                "location": item.get("location", {}).get("display_name") if isinstance(item.get("location"), dict) else location or "",
+                "description": item.get("description") or "",
+                "url": item.get("redirect_url") or "",
+                "raw": item
+            })
+
+        return jobs
+    except Exception as e:
+        logger.warning("Adzuna request exception for %r/%r: %s", query, location, e)
+        return []
+
+# ---------------------------
+# Reed API (UK jobs, requires API key)
+# ---------------------------
+def query_reed(query: str, location: Optional[str] = None, limit: int = 20) -> List[Dict]:
+    if not REED_API_KEY:
+        logger.debug("No REED_API_KEY set; skipping reed")
+        return []
+
+    try:
+        url = "https://www.reed.co.uk/api/1.0/search"
+
+        params = {
+            "keywords": query or "",
+            "resultsToTake": min(limit, 100)  # Reed max is 100
+        }
+
+        if location:
+            params["locationName"] = location
+
+        # Reed uses Basic Auth with API key as username and empty password
+        resp = http_request("GET", url, params=params, auth=(REED_API_KEY, ""))
+
+        if resp.status_code != 200:
+            logger.warning("Reed returned %s for %r/%r: %s", resp.status_code, query, location, (resp.text or "")[:300])
+            return []
+
+        data = resp.json()
+        jobs = []
+
+        for item in data.get("results", []):
+            jobs.append({
+                "id": item.get("jobId"),
+                "title": item.get("jobTitle"),
+                "company": item.get("employerName"),
+                "location": item.get("locationName") or location or "",
+                "description": item.get("jobDescription") or "",
+                "url": item.get("jobUrl") or "",
+                "raw": item
+            })
+
+        return jobs
+    except Exception as e:
+        logger.warning("Reed request exception for %r/%r: %s", query, location, e)
+        return []
+
 
 # -------------------------
 # Indeed HTML parse (careful)
@@ -670,6 +767,10 @@ def main():
                             candidate_jobs += query_jobicy(qtext, limit=src.get("limit", 50))
                         elif stype == "himalayas":
                             candidate_jobs += query_himalayas(qtext, limit=src.get("limit", 40))
+                        elif stype == "adzuna":
+                            candidate_jobs += query_adzuna(qtext, location=city or country_name, limit=src.get("limit", 20))
+                        elif stype == "reed":
+                            candidate_jobs += query_reed(qtext, location=city or country_name, limit=src.get("limit", 20))
                         elif stype == "indeed":
                             if src.get("enabled_html", False):
                                 candidate_jobs += parse_indeed(query or qtext, city, limit=src.get("limit", 20))
